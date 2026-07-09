@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Video } from '@/data/mock'
-import { categories, formatViews } from '@/data/mock'
+import { categories, formatViews, type Comment } from '@/data/mock'
 import { useInteractions } from '@/hooks/useInteractions'
 import { useAccount } from '@/hooks/useAccount'
 import { useSocial } from '@/hooks/useSocial'
@@ -18,11 +18,13 @@ export default function VideoDetailPage({
   allVideos,
   onBack,
   onPlay,
+  onOpenAccount,
 }: {
   video: Video
   allVideos: Video[]
   onBack: () => void
   onPlay: (v: Video) => void
+  onOpenAccount?: (id: string) => void
 }) {
   const cat = categories.find((c) => c.key === video.category)
   const {
@@ -55,10 +57,17 @@ export default function VideoDetailPage({
   const baseCoin = Math.max(1, Math.round(video.viewsNum / 380))
   const baseFav = Math.max(1, Math.round(video.viewsNum / 300))
   const followed = isFollowed(video.author)
-  // 视频作者若是真实账号（非游客/预设），则关注走双向社交图并互关
-  const authorAccount = accounts.find((a) => a.name === video.author && a.id !== activeId) ?? null
+  // 视频作者若是真实账号（非游客/预设），则关注走双向社交图并互关。
+  // 优先按稳定 authorId 匹配，避免改名/重名导致错靶；降级按显示名。
+  const authorAccount =
+    (video.authorId
+      ? accounts.find((a) => a.id === video.authorId && a.id !== activeId)
+      : undefined) ?? accounts.find((a) => a.name === video.author && a.id !== activeId) ?? null
   const comments = getComments(video.id)
   const [replyTarget, setReplyTarget] = useState<{ user: string; id: string } | null>(null)
+
+  // 把扁平评论按 replyTo 组装成线程树（顶层 + 嵌套回复）
+  const threads = buildThreads(comments)
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -140,6 +149,19 @@ export default function VideoDetailPage({
     removeUpload(video)
     showToast('已删除投稿')
     onBack()
+  }
+
+  // 向视频作者推送互动通知（点赞/投币/收藏）；作者为真实账号、且不是自己时生效
+  const pushEngagement = (type: 'like' | 'coin' | 'fav', label: string) => {
+    if (!authorAccount) return
+    social.pushNotification(authorAccount.id, {
+      type,
+      fromName: account.name,
+      fromId: activeId ?? undefined,
+      text: `${label}了你的视频`,
+      videoId: video.id,
+      videoTitle: video.title,
+    })
   }
 
   return (
@@ -228,7 +250,17 @@ export default function VideoDetailPage({
             <p className="mt-2 text-sm text-muted-foreground">{video.desc}</p>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            <span>@{video.author}</span>
+            {authorAccount && onOpenAccount ? (
+              <button
+                onClick={() => onOpenAccount(authorAccount.id)}
+                className="font-medium text-foreground transition hover:text-red-500"
+                title="查看 TA 的主页"
+              >
+                @{video.author}
+              </button>
+            ) : (
+              <span>@{video.author}</span>
+            )}
             {authorAccount && social.mutualWith(authorAccount.id) && (
               <span className="rounded-full bg-emerald-600/15 px-2 py-0.5 text-xs font-medium text-emerald-500">
                 互关
@@ -281,8 +313,10 @@ export default function VideoDetailPage({
           <div className="mt-4 flex flex-wrap gap-3">
             <button
               onClick={() => {
+                const will = !isLiked(video.id)
                 toggleLike(video.id)
-                showToast(isLiked(video.id) ? '已取消点赞' : '点赞 +1 ❤️')
+                showToast(will ? '点赞 +1 ❤️' : '已取消点赞')
+                if (will) pushEngagement('like', '赞')
               }}
               className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition ${
                 isLiked(video.id) ? 'bg-red-600 text-white' : 'bg-card text-foreground hover:bg-background'
@@ -292,8 +326,10 @@ export default function VideoDetailPage({
             </button>
             <button
               onClick={() => {
+                const will = !isCoined(video.id)
                 toggleCoin(video.id)
-                showToast(isCoined(video.id) ? '已取消投币' : '投币 +1 🪙')
+                showToast(will ? '投币 +1 🪙' : '已取消投币')
+                if (will) pushEngagement('coin', '投币')
               }}
               className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition ${
                 isCoined(video.id) ? 'bg-amber-500 text-white' : 'bg-card text-foreground hover:bg-background'
@@ -303,8 +339,10 @@ export default function VideoDetailPage({
             </button>
             <button
               onClick={() => {
+                const will = !isFaved(video.id)
                 toggleFav(video.id)
-                showToast(isFaved(video.id) ? '已取消收藏' : '收藏成功 ⭐')
+                showToast(will ? '收藏成功 ⭐' : '已取消收藏')
+                if (will) pushEngagement('fav', '收藏')
               }}
               className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition ${
                 isFaved(video.id) ? 'bg-yellow-500 text-white' : 'bg-card text-foreground hover:bg-background'
@@ -350,7 +388,7 @@ export default function VideoDetailPage({
                         authorId: activeId ?? undefined,
                         replyTo: replyTarget,
                       })
-                      // 回复真实账号的评论 → 向对方推送通知
+                      // 回复真实账号的评论 → 向对方推送通知（带评论片段）
                       const target = accounts.find(
                         (a) => a.name === replyTarget.user && a.id !== activeId,
                       )
@@ -359,7 +397,7 @@ export default function VideoDetailPage({
                           type: 'reply',
                           fromName: account.name,
                           fromId: activeId ?? undefined,
-                          text: `回复了你的评论`,
+                          text: `回复了你的评论：${clip(commentText)}`,
                           videoId: video.id,
                           videoTitle: video.title,
                         })
@@ -368,13 +406,13 @@ export default function VideoDetailPage({
                       addComment(video.id, commentText, account.name, {
                         authorId: activeId ?? undefined,
                       })
-                      // 评论真实账号的视频 → 向作者推送通知
+                      // 评论真实账号的视频 → 向作者推送通知（带评论片段）
                       if (authorAccount) {
                         social.pushNotification(authorAccount.id, {
                           type: 'comment',
                           fromName: account.name,
                           fromId: activeId ?? undefined,
-                          text: `评论了你的视频`,
+                          text: `评论了你的视频：${clip(commentText)}`,
                           videoId: video.id,
                           videoTitle: video.title,
                         })
@@ -397,45 +435,17 @@ export default function VideoDetailPage({
                 </button>
               )}
             </div>
-            <div className="mt-4 space-y-3">
-              {comments.map((c) => (
-                <div key={c.id} className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white">
-                    {c.avatar}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm">
-                      <span className="font-semibold">@{c.user}</span>{' '}
-                      <span className="text-xs text-muted-foreground">· {c.time}</span>
-                    </div>
-                    {c.replyTo && (
-                      <div className="text-xs text-muted-foreground">↩ 回复 @{c.replyTo.user}</div>
-                    )}
-                    <div className="text-sm text-muted-foreground">
-                      {c.deleted ? '该评论已删除' : c.text}
-                    </div>
-                  </div>
-                  {!c.deleted && (
-                    <div className="flex shrink-0 flex-col items-end gap-1 self-center">
-                      <button
-                        onClick={() => setReplyTarget({ user: c.user, id: c.id })}
-                        className="rounded-full px-2 py-1 text-xs text-muted-foreground transition hover:text-foreground"
-                        title="回复"
-                      >
-                        回复
-                      </button>
-                      {c.authorId === activeId && (
-                        <button
-                          onClick={() => deleteComment(video.id, c.id)}
-                          className="rounded-full px-2 py-1 text-xs text-muted-foreground transition hover:text-red-500"
-                          title="删除我的评论"
-                        >
-                          删除
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
+            <div className="mt-4 space-y-4">
+              {threads.map((c) => (
+                <CommentThread
+                  key={c.id}
+                  node={c}
+                  depth={0}
+                  activeId={activeId}
+                  onReply={(user, id) => setReplyTarget({ user, id })}
+                  onDelete={(cid) => deleteComment(video.id, cid)}
+                  onOpenAccount={onOpenAccount}
+                />
               ))}
             </div>
           </div>
@@ -474,5 +484,103 @@ export default function VideoDetailPage({
         </div>
       )}
     </main>
+  )
+}
+
+// 把扁平评论按 replyTo 组装成线程树（顶层 + 嵌套回复）
+type CNode = Comment & { replies: CNode[] }
+function buildThreads(list: Comment[]): CNode[] {
+  const map = new Map<string, CNode>()
+  list.forEach((c) => map.set(c.id, { ...c, replies: [] }))
+  const roots: CNode[] = []
+  list.forEach((c) => {
+    const node = map.get(c.id)!
+    const parentId = c.replyTo?.id
+    if (parentId && map.has(parentId)) {
+      map.get(parentId)!.replies.push(node)
+    } else {
+      roots.push(node)
+    }
+  })
+  return roots
+}
+
+// 通知里展示的评论片段（最多 18 字）
+function clip(text: string): string {
+  const t = text.trim()
+  return t.length > 18 ? `${t.slice(0, 18)}…` : t
+}
+
+// 单条评论（递归渲染嵌套回复，缩进表达线程）
+function CommentThread({
+  node,
+  depth,
+  activeId,
+  onReply,
+  onDelete,
+  onOpenAccount,
+}: {
+  node: CNode
+  depth: number
+  activeId: string | null
+  onReply: (user: string, id: string) => void
+  onDelete: (id: string) => void
+  onOpenAccount?: (id: string) => void
+}) {
+  return (
+    <div className={depth > 0 ? 'ml-6 border-l border-border pl-4' : ''}>
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white">
+          {node.avatar}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm">
+            <span className="font-semibold">@{node.user}</span>{' '}
+            <span className="text-xs text-muted-foreground">· {node.time}</span>
+          </div>
+          {node.replyTo && (
+            <div className="text-xs text-muted-foreground">↩ 回复 @{node.replyTo.user}</div>
+          )}
+          <div className="text-sm text-muted-foreground">
+            {node.deleted ? '该评论已删除' : node.text}
+          </div>
+        </div>
+        {!node.deleted && (
+          <div className="flex shrink-0 flex-col items-end gap-1 self-center">
+            <button
+              onClick={() => onReply(node.user, node.id)}
+              className="rounded-full px-2 py-1 text-xs text-muted-foreground transition hover:text-foreground"
+              title="回复"
+            >
+              回复
+            </button>
+            {node.authorId === activeId && (
+              <button
+                onClick={() => onDelete(node.id)}
+                className="rounded-full px-2 py-1 text-xs text-muted-foreground transition hover:text-red-500"
+                title="删除我的评论"
+              >
+                删除
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {node.replies.length > 0 && (
+        <div className="mt-3 space-y-3">
+          {node.replies.map((r) => (
+            <CommentThread
+              key={r.id}
+              node={r}
+              depth={depth + 1}
+              activeId={activeId}
+              onReply={onReply}
+              onDelete={onDelete}
+              onOpenAccount={onOpenAccount}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

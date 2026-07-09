@@ -144,6 +144,7 @@ export default function UploadPage({
         id,
         title: title.trim(),
         author: account.name,
+        authorId: account.id,
         views: '0',
         viewsNum: 0,
         duration,

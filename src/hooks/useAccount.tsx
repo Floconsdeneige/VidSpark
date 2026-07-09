@@ -17,7 +17,7 @@ import {
 
 export type Notification = {
   id: string
-  type: 'follow' | 'comment' | 'reply'
+  type: 'follow' | 'comment' | 'reply' | 'like' | 'coin' | 'fav'
   fromId?: string
   fromName: string
   text: string

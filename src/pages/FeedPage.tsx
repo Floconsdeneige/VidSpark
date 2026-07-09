@@ -63,11 +63,12 @@ export default function FeedPage({
       })
     })
 
-    // 2) 我关注的 UP 主投稿
+    // 2) 我关注的 UP 主投稿（按作者名 或 真实账号 id 命中，改名后仍可见）
     const followedSet = new Set(followed)
+    const followedIds = new Set(social.followingList(activeId ?? '').map((a) => a.id))
     const myIds = new Set(userUploads.map((u) => u.id))
     allVideos.forEach((v) => {
-      if (followedSet.has(v.author) && !myIds.has(v.id)) {
+      if (!myIds.has(v.id) && (followedSet.has(v.author) || (v.authorId != null && followedIds.has(v.authorId)))) {
         out.push({
           key: `f-up-${v.id}`,
           type: 'upload',

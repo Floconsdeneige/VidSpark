@@ -5,6 +5,8 @@ export type Video = {
   id: number
   title: string
   author: string
+  /** 真实账号 id（用户上传时写入）；用于按稳定身份匹配作者，避免改名/重名错靶。mock 视频无此字段。 */
+  authorId?: string
   views: string
   viewsNum: number
   duration: string

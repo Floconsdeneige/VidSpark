@@ -65,12 +65,17 @@ function Shell() {
     setNotifOpen((v) => !v)
     if (!notifOpen) social.markNotificationsRead()
   }
-  const onNotifClick = (videoId?: number) => {
+  const onNotifClick = (videoId?: number, fromId?: string) => {
     setNotifOpen(false)
     if (videoId != null) {
       const v = allVideos.find((x) => x.id === videoId)
-      if (v) play(v)
+      if (v) {
+        play(v)
+        return
+      }
     }
+    // 无关联视频（如「关注了你」）但有来源账号 → 打开对方主页
+    if (fromId) setProfileAccountId(fromId)
   }
 
   // 全站视频 = 用户上传(置顶) + 默认库
@@ -201,13 +206,23 @@ function Shell() {
                 social.notifications.map((n) => (
                   <button
                     key={n.id}
-                    onClick={() => onNotifClick(n.videoId)}
+                    onClick={() => onNotifClick(n.videoId, n.fromId)}
                     className={`flex w-full items-start gap-2 rounded-xl px-2 py-2 text-left text-sm transition hover:bg-background ${
                       n.read ? '' : 'bg-red-600/5'
                     }`}
                   >
                     <span className="mt-0.5 text-base">
-                      {n.type === 'follow' ? '➕' : n.type === 'comment' ? '💬' : '↩️'}
+                      {n.type === 'follow'
+                        ? '➕'
+                        : n.type === 'comment'
+                          ? '💬'
+                          : n.type === 'reply'
+                            ? '↩️'
+                            : n.type === 'like'
+                              ? '❤️'
+                              : n.type === 'coin'
+                                ? '🪙'
+                                : '⭐'}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="font-semibold">@{n.fromName}</span>{' '}
@@ -251,7 +266,7 @@ function Shell() {
       {view === 'settings' && <SettingsPage onBack={() => go('home')} />}
       {view === 'detail' && detailVideo && (
         // key 绑定视频 id：从相关推荐点另一视频时，重建页面以重置播放/评论状态
-        <VideoDetailPage key={detailVideo.id} video={detailVideo} allVideos={allVideos} onBack={() => go('home')} onPlay={play} />
+        <VideoDetailPage key={detailVideo.id} video={detailVideo} allVideos={allVideos} onBack={() => go('home')} onPlay={play} onOpenAccount={setProfileAccountId} />
       )}
 
       {/* 他人主页浮层 */}
