@@ -5,13 +5,14 @@ import { useInteractions } from '@/hooks/useInteractions'
 import { useLibrary } from '@/hooks/useLibrary'
 import { useAccount } from '@/hooks/useAccount'
 
-type Tab = 'uploads' | 'faved' | 'liked' | 'history'
+type Tab = 'uploads' | 'faved' | 'liked' | 'history' | 'following'
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'uploads', label: '我的投稿', icon: '📤' },
   { key: 'faved', label: '收藏', icon: '⭐' },
   { key: 'liked', label: '点赞', icon: '👍' },
   { key: 'history', label: '观看历史', icon: '🕘' },
+  { key: 'following', label: '关注', icon: '➕' },
 ]
 
 const AVATARS = ['😎', '🦊', '🐱', '🐼', '🚀', '🌟', '🔥', '🍉', '👾', '🐯', '🦄', '🌈']
@@ -28,23 +29,28 @@ export default function ProfilePage({
   onBack: () => void
 }) {
   const { userVideos, removeUpload, history } = useLibrary()
-  const { isFaved, isLiked } = useInteractions()
+  const { isFaved, isLiked, followed, toggleFollow } = useInteractions()
   const { account, setName, setAvatar } = useAccount()
   const [tab, setTab] = useState<Tab>('uploads')
   const [editing, setEditing] = useState(false)
   const [draftName, setDraftName] = useState(account.name)
   const [draftAvatar, setDraftAvatar] = useState(account.avatar)
+  const [openAuthor, setOpenAuthor] = useState<string | null>(null)
 
   const byId = (id: number) => allVideos.find((v) => v.id === id)
+
+  const videosByAuthor = (author: string) =>
+    allVideos.filter((v) => v.author === author)
 
   const lists: Record<Tab, Video[]> = {
     uploads: userVideos,
     faved: allVideos.filter((v) => isFaved(v.id)),
     liked: allVideos.filter((v) => isLiked(v.id)),
     history: history.map(byId).filter((v): v is Video => !!v),
+    following: [],
   }
 
-  const current = lists[tab]
+  const current = tab === 'following' ? [] : lists[tab]
 
   const saveProfile = () => {
     setName(draftName)
@@ -129,12 +135,61 @@ export default function ProfilePage({
           >
             <span>{t.icon}</span>
             {t.label}
-            <span className="opacity-70">{lists[t.key].length}</span>
+            <span className="opacity-70">
+              {t.key === 'following' ? followed.length : lists[t.key].length}
+            </span>
           </button>
         ))}
       </div>
 
-      {current.length === 0 ? (
+      {tab === 'following' ? (
+        followed.length === 0 ? (
+          <div className="py-16 text-center text-muted-foreground">
+            还没有关注任何人。去视频详情页点「+ 关注」，或逛逛首页关注流吧～
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {followed.map((author) => {
+              const his = videosByAuthor(author)
+              const open = openAuthor === author
+              return (
+                <div key={author} className="rounded-2xl border border-border bg-card p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-pink-500 text-lg font-bold text-white">
+                      {Array.from(author)[0] ?? 'U'}
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-semibold">@{author}</div>
+                      <div className="text-xs text-muted-foreground">{his.length} 个视频</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`取消关注 @${author}？`)) toggleFollow(author)
+                      }}
+                      className="rounded-full border border-border px-3 py-1.5 text-xs font-medium transition hover:border-red-500 hover:text-red-500"
+                    >
+                      取关
+                    </button>
+                    <button
+                      onClick={() => setOpenAuthor(open ? null : author)}
+                      className="rounded-full bg-card px-3 py-1.5 text-xs font-medium transition hover:bg-background"
+                    >
+                      {open ? '收起' : '展开'}
+                    </button>
+                  </div>
+                  {open && his.length > 0 && (
+                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {his.map((v) => (
+                        <VideoCard key={v.id} video={v} onClick={() => onPlay(v)} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )
+      ) : current.length === 0 ? (
         <div className="py-16 text-center text-muted-foreground">
           {tab === 'uploads' ? (
             <>

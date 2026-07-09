@@ -1,5 +1,7 @@
 import type { Video } from '@/data/mock'
+import { formatViews } from '@/data/mock'
 import { useInteractions } from '@/hooks/useInteractions'
+import { useLibrary } from '@/hooks/useLibrary'
 
 export default function VideoCard({
   video,
@@ -11,6 +13,7 @@ export default function VideoCard({
   onClick?: () => void
 }) {
   const { isLiked, toggleLike, isFaved, toggleFav } = useInteractions()
+  const { viewCount } = useLibrary()
   const liked = isLiked(video.id)
   const faved = isFaved(video.id)
 
@@ -95,7 +98,7 @@ export default function VideoCard({
       <div className="p-3">
         <div className="line-clamp-2 font-medium leading-snug">{video.title}</div>
         <div className="mt-1 text-sm text-muted-foreground">
-          @{video.author} · {video.views}次观看
+          @{video.author} · {formatViews(viewCount(video))}次观看
         </div>
         {video.tags && video.tags.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">

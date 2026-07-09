@@ -6,13 +6,14 @@ import CategoriesPage from '@/pages/CategoriesPage'
 import UploadPage from '@/pages/UploadPage'
 import FeedPage from '@/pages/FeedPage'
 import ProfilePage from '@/pages/ProfilePage'
+import SettingsPage from '@/pages/SettingsPage'
 import VideoDetailPage from '@/pages/VideoDetailPage'
 import { AccountProvider } from '@/hooks/useAccount'
 import { InteractionsProvider } from '@/hooks/useInteractions'
 import { LibraryProvider, useLibrary } from '@/hooks/useLibrary'
 import { videos as baseVideos, type Video } from '@/data/mock'
 
-type View = 'home' | 'popular' | 'categories' | 'upload' | 'feed' | 'profile' | 'detail'
+type View = 'home' | 'popular' | 'categories' | 'upload' | 'feed' | 'profile' | 'settings' | 'detail'
 
 const tabs: { key: View; label: string }[] = [
   { key: 'home', label: '首页' },
@@ -21,6 +22,7 @@ const tabs: { key: View; label: string }[] = [
   { key: 'upload', label: '上传' },
   { key: 'feed', label: '动态' },
   { key: 'profile', label: '我的' },
+  { key: 'settings', label: '设置' },
 ]
 
 const navColor: Record<View, string> = {
@@ -30,6 +32,7 @@ const navColor: Record<View, string> = {
   upload: '#10b981',
   feed: '#3b82f6',
   profile: '#ec4899',
+  settings: '#64748b',
   detail: '#ff4d4d',
 }
 
@@ -40,6 +43,7 @@ const navIcon: Record<string, string> = {
   upload: '📤',
   feed: '📡',
   profile: '👤',
+  settings: '⚙️',
   detail: '▶️',
 }
 
@@ -114,7 +118,8 @@ function Shell() {
         >
           <input
             name="q"
-            defaultValue={searchQuery}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="搜视频 / UP主 / 分区 / 标签 / 简介…"
             className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
@@ -145,6 +150,7 @@ function Shell() {
       )}
       {view === 'feed' && <FeedPage allVideos={allVideos} userUploads={userVideos} onPlay={play} />}
       {view === 'profile' && <ProfilePage allVideos={allVideos} onPlay={play} onGoHome={() => go('home')} onBack={() => go('home')} />}
+      {view === 'settings' && <SettingsPage onBack={() => go('home')} />}
       {view === 'detail' && detailVideo && (
         // key 绑定视频 id：从相关推荐点另一视频时，重建页面以重置播放/评论状态
         <VideoDetailPage key={detailVideo.id} video={detailVideo} allVideos={allVideos} onBack={() => go('home')} onPlay={play} />

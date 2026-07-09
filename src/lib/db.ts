@@ -91,3 +91,56 @@ export async function deleteBlob(key: string): Promise<void> {
     db.close()
   }
 }
+
+/** 读取全部 blob，返回 key -> base64 字符串（用于备份导出） */
+export async function getAllBlobs(): Promise<Record<string, string>> {
+  const db = await openDB()
+  try {
+    return await new Promise<Record<string, string>>((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly')
+      const store = tx.objectStore(STORE)
+      const out: Record<string, string> = {}
+      const cursorReq = store.openCursor()
+      cursorReq.onsuccess = () => {
+        const cursor = cursorReq.result
+        if (cursor) {
+          const blob = cursor.value as Blob
+          const fr = new FileReader()
+          fr.onload = () => {
+            out[cursor.key as string] = (fr.result as string).split(',')[1] ?? ''
+            cursor.continue()
+          }
+          fr.onerror = () => cursor.continue()
+          fr.readAsDataURL(blob)
+        } else {
+          resolve(out)
+        }
+      }
+      cursorReq.onerror = () => reject(cursorReq.error)
+    })
+  } finally {
+    db.close()
+  }
+}
+
+/** 从 base64 写回一个 blob（用于备份导入） */
+export async function putBlobFromBase64(key: string, b64: string): Promise<void> {
+  const res = await fetch(`data:application/octet-stream;base64,${b64}`)
+  const blob = await res.blob()
+  await putBlob(key, blob)
+}
+
+/** 清空所有 blob */
+export async function clearAllBlobs(): Promise<void> {
+  const db = await openDB()
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite')
+      tx.objectStore(STORE).clear()
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } finally {
+    db.close()
+  }
+}

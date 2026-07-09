@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import EvilEye from '@/components/EvilEye'
 import VideoCard from '@/components/VideoCard'
 import { videos as allVideos, type Video } from '@/data/mock'
+import { useInteractions } from '@/hooks/useInteractions'
 
 export default function HomePage({
   userVideos,
@@ -11,8 +13,14 @@ export default function HomePage({
   allVideos: Video[]
   onPlay: (v: Video) => void
 }) {
-  // 推荐：默认库 + 用户上传，去重后展示
+  const { followed } = useInteractions()
+  const [tab, setTab] = useState<'recommend' | 'following'>('recommend')
+
   const recommended = allVideos
+  const followingVideos = allVideos.filter(
+    (v) => followed.includes(v.author) && !userVideos.some((u) => u.id === v.id),
+  )
+
   return (
     <>
       {/* Hero：EvilEye 招牌慧眼 */}
@@ -35,23 +43,58 @@ export default function HomePage({
       </section>
 
       <main className="px-6 pb-20">
-        {userVideos.length > 0 && (
+        {/* 推荐 / 关注 切换 */}
+        <div className="mb-6 flex gap-2">
+          {(['recommend', 'following'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                tab === t ? 'bg-red-600 text-white' : 'bg-card text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {t === 'recommend' ? '🔥 推荐' : `➕ 关注${followed.length ? ` (${followed.length})` : ''}`}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'following' ? (
+          followed.length === 0 ? (
+            <div className="py-16 text-center text-muted-foreground">
+              你还没有关注任何人。去视频详情页点「+ 关注」，关注的 UP 主投稿会出现在这里～
+            </div>
+          ) : followingVideos.length === 0 ? (
+            <div className="py-16 text-center text-muted-foreground">
+              你关注的 UP 主暂时还没有投稿（默认库里可能没他们的视频）。去发个视频或关注更多 UP 主吧～
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {followingVideos.map((v) => (
+                <VideoCard key={v.id} video={v} onClick={() => onPlay(v)} />
+              ))}
+            </div>
+          )
+        ) : (
           <>
-            <h2 className="mb-4 text-lg font-semibold">📤 你发布的视频</h2>
-            <div className="mb-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {userVideos.map((v) => (
-                <VideoCard key={`u-${v.id}`} video={v} onClick={() => onPlay(v)} />
+            {userVideos.length > 0 && (
+              <>
+                <h2 className="mb-4 text-lg font-semibold">📤 你发布的视频</h2>
+                <div className="mb-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                  {userVideos.map((v) => (
+                    <VideoCard key={`u-${v.id}`} video={v} onClick={() => onPlay(v)} />
+                  ))}
+                </div>
+              </>
+            )}
+
+            <h2 className="mb-4 text-lg font-semibold">🔥 为你推荐</h2>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {recommended.map((v) => (
+                <VideoCard key={v.id} video={v} onClick={() => onPlay(v)} />
               ))}
             </div>
           </>
         )}
-
-        <h2 className="mb-4 text-lg font-semibold">🔥 为你推荐</h2>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {recommended.map((v) => (
-            <VideoCard key={v.id} video={v} onClick={() => onPlay(v)} />
-          ))}
-        </div>
       </main>
     </>
   )
