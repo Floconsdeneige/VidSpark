@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VidSpark · 单文件 HTML（原版界面：WebGL 慧眼 + GSAP 气泡导航）</title>
+<style>
+  :root{
+    --bg:#09090b; --card:#18181b; --card2:#1f1f23; --border:#27272a;
+    --fg:#fafafa; --muted:#a1a1aa; --red:#ef4444; --red-soft:#f87171;
+    --radius:14px; --shadow:0 6px 24px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    min-height:100vh;
+  }
+  a{color:inherit;text-decoration:none}
+  button{font-family:inherit;cursor:pointer}
+
+  /* ---------- 顶部导航 ---------- */
+  header{
+    position:sticky;top:0;z-index:50;
+    background:rgba(9,9,11,.85);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border);
+    padding:10px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  }
+  .brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:20px}
+  .brand .dot{width:14px;height:14px;border-radius:50%;background:var(--red);box-shadow:0 0 12px var(--red)}
+  .tabs{display:flex;gap:4px;flex-wrap:wrap}
+  .tab{padding:7px 14px;border-radius:999px;border:1px solid transparent;background:transparent;color:var(--muted);font-size:14px;transition:.15s}
+  .tab:hover{color:var(--fg);background:var(--card)}
+  .tab.active{color:#fff;background:var(--red);border-color:var(--red)}
+  .search{flex:1;min-width:160px;display:flex}
+  .search input{width:100%;padding:9px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--fg);outline:none;font-size:14px}
+  .search input:focus{border-color:var(--red)}
+
+  main{padding:20px 16px 90px;max-width:1200px;margin:0 auto}
+  .page-title{font-size:22px;font-weight:800;margin:0 0 4px}
+  .page-sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+  .section-h{font-size:16px;font-weight:700;margin:26px 0 12px;display:flex;align-items:center;gap:8px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:18px}
+
+  /* ---------- 视频卡 ---------- */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative;transition:.18s;cursor:pointer}
+  .card:hover{transform:translateY(-4px);border-color:#3f3f46;box-shadow:var(--shadow)}
+  .thumb{height:150px;position:relative;display:flex;align-items:center;justify-content:center;color:#fff;font-size:34px}
+  .thumb .dur{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.7);padding:2px 7px;border-radius:6px;font-size:12px}
+  .thumb .cat{position:absolute;left:8px;top:8px;background:rgba(0,0,0,.55);padding:2px 8px;border-radius:999px;font-size:11px}
+  .badge{position:absolute;left:8px;top:8px;background:var(--red);color:#fff;font-size:11px;padding:2px 8px;border-radius:999px;font-weight:700}
+  .card .meta{padding:11px 12px}
+  .card .ttl{font-weight:700;font-size:14px;line-height:1.35;margin-bottom:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .card .sub{color:var(--muted);font-size:12.5px}
+  .card .actions{position:absolute;right:10px;bottom:10px;display:none;gap:6px}
+  .card:hover .actions{display:flex}
+  .mini{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:rgba(24,24,27,.92);color:#fff;font-size:15px;display:flex;align-items:center;justify-content:center;transition:.15s}
+  .mini:hover{background:var(--red);border-color:var(--red);transform:scale(1.08)}
+  .mini.on{background:var(--red);border-color:var(--red)}
+
+  /* ---------- 慧眼 hero（WebGL） ---------- */
+  .hero{position:relative;border-radius:18px;overflow:hidden;margin-bottom:24px;border:1px solid var(--border);
+    background:radial-gradient(120% 140% at 50% -20%, rgba(239,68,68,.18), transparent 60%),linear-gradient(180deg,#101013,#0b0b0e);
+    padding:26px 20px;display:flex;flex-direction:column;align-items:center;gap:10px}
+  .hero canvas{width:300px;height:300px;cursor:crosshair;display:block}
+  .hero h1{margin:4px 0 0;font-size:26px}
+  .hero p{margin:0;color:var(--muted);font-size:13px;text-align:center}
+  .hero .cta{margin-top:6px;display:flex;gap:10px}
+  .btn{border:1px solid var(--border);background:var(--card);color:#fff;padding:9px 18px;border-radius:999px;font-size:14px;transition:.15s}
+  .btn:hover{border-color:#3f3f46}
+  .btn.primary{background:var(--red);border-color:var(--red)}
+  .btn.primary:hover{background:#dc2626}
+
+  .catbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .chip{padding:6px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:13px;transition:.15s}
+  .chip:hover{color:#fff}
+  .chip.active{background:#fff;color:#111;border-color:#fff;font-weight:700}
+  .hist{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .hist .h{color:var(--muted);font-size:12px}
+  .hist .tag{background:var(--card);border:1px solid var(--border);padding:4px 10px;border-radius:999px;font-size:12px;display:flex;gap:6px;align-items:center}
+  .hist .tag b{cursor:pointer}
+  .hist .tag .x{cursor:pointer;color:var(--muted);font-size:13px}
+  .hist .tag .x:hover{color:var(--red)}
+
+  /* ---------- 上传表单 ---------- */
+  .form{max-width:640px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .field input[type=text],.field textarea,.field select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card2);color:#fff;outline:none;font-size:14px}
+  .field input:focus,.field textarea:focus,.field select:focus{border-color:var(--red)}
+  .drop{border:2px dashed var(--border);border-radius:12px;padding:26px;text-align:center;color:var(--muted);cursor:pointer;transition:.15s;background:var(--card2)}
+  .drop:hover{border-color:var(--red);color:#fff}
+  .drop.drag{border-color:var(--red);background:rgba(239,68,68,.08)}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row>.field{flex:1;min-width:160px}
+  .preview{margin-top:10px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .preview .pv{width:120px;height:70px;border-radius:10px;background-size:cover;background-position:center;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;overflow:hidden}
+  .preview .pv img{width:100%;height:100%;object-fit:cover}
+  .err{color:var(--red-soft);font-size:12.5px;margin-top:6px;min-height:16px}
+  .prog{height:8px;background:var(--card2);border-radius:999px;overflow:hidden;margin-top:10px;display:none}
+  .prog>i{display:block;height:100%;width:0;background:var(--red);transition:width .1s}
+
+  /* ---------- 动态 ---------- */
+  .feed-item{display:flex;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;align-items:center}
+  .feed-item .av{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#ef4444,#f59e0b);flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff}
+  .feed-item .tx{flex:1;min-width:0}
+  .feed-item .tx .u{font-weight:700;font-size:14px}
+  .feed-item .tx .c{color:var(--muted);font-size:13px}
+  .feed-item .tx .tgt{margin-top:6px;display:inline-block;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;cursor:pointer}
+  .feed-item .tx .tgt:hover{border-color:var(--red)}
+
+  /* ---------- 播放页 ---------- */
+  .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;overflow:auto}
+  .modal-mask.show{display:block}
+  .player{position:relative;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+  .player .frame{position:absolute;inset:0;opacity:.85}
+  .player .center{position:relative;z-index:3;text-align:center}
+  .player .playbtn{width:64px;height:64px;border-radius:50%;background:rgba(239,68,68,.92);border:none;color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;margin:0 auto}
+  .player .bar{position:absolute;left:0;right:0;bottom:0;z-index:4;background:linear-gradient(0deg,rgba(0,0,0,.7),transparent);padding:18px 14px 10px}
+  .player .track{height:5px;background:rgba(255,255,255,.25);border-radius:999px;cursor:pointer}
+  .player .track>i{display:block;height:100%;width:0;background:var(--red);border-radius:999px}
+  .player .time{color:#fff;font-size:12px;margin-top:6px;display:flex;justify-content:space-between}
+  .dm-layer{position:absolute;inset:0;overflow:hidden;z-index:2;pointer-events:none}
+  .dm{position:absolute;top:0;white-space:nowrap;color:#fff;text-shadow:0 1px 2px #000;font-size:14px;z-index:2;will-change:transform}
+  .detail-wrap{max-width:1000px;margin:0 auto;padding:20px 16px 60px}
+  .detail-head{font-size:18px;font-weight:800;margin:14px 0 6px}
+  .detail-author{display:flex;align-items:center;gap:10px;margin:10px 0;color:var(--muted);font-size:14px}
+  .follow{border:1px solid var(--red);color:var(--red);background:transparent;padding:5px 14px;border-radius:999px;font-size:13px}
+  .follow.on{background:var(--red);color:#fff}
+  .acts{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+  .act{border:1px solid var(--border);background:var(--card);color:#fff;border-radius:999px;padding:8px 16px;font-size:14px;display:flex;align-items:center;gap:7px;transition:.15s}
+  .act:hover{border-color:#3f3f46}
+  .act.on{background:var(--red);border-color:var(--red)}
+  .comments{margin-top:18px}
+  .cmt-form{display:flex;gap:8px;margin-bottom:14px}
+  .cmt-form input{flex:1;padding:9px 12px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:#fff;outline:none}
+  .cmt{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--border)}
+  .cmt .av2{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#ec4899);flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff}
+  .cmt .body .name{font-size:13px;font-weight:700}
+  .cmt .body .txt{font-size:14px;color:#e4e4e7}
+  .rel{margin-top:22px}
+  .back{position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;display:flex;align-items:center;gap:10px}
+  .back button{background:var(--card);border:1px solid var(--border);color:#fff;border-radius:8px;padding:6px 12px}
+
+  /* ============ BubbleMenu（移植自 react-bits，GSAP 动画） ============ */
+  .bubble-menu{left:0;right:0;top:2em;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 2em;pointer-events:none;z-index:99}
+  .bubble-menu.fixed{position:fixed}
+  .bubble-menu.absolute{position:absolute}
+  .bubble-menu .bubble{--bubble-size:48px;width:var(--bubble-size);height:var(--bubble-size);border-radius:50%;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.12);display:inline-flex;align-items:center;justify-content:center;pointer-events:auto}
+  .bubble-menu .logo-bubble,.bubble-menu .toggle-bubble{will-change:transform}
+  .bubble-menu .logo-bubble{width:auto;min-height:var(--bubble-size);height:var(--bubble-size);padding:0 16px;border-radius:calc(var(--bubble-size)/2);gap:8px}
+  .bubble-menu .toggle-bubble{width:var(--bubble-size);height:var(--bubble-size)}
+  .bubble-menu .logo-content{display:inline-flex;align-items:center;justify-content:center;width:120px;height:100%}
+  .bubble-menu .menu-btn{border:none;background:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0}
+  .bubble-menu .menu-line{width:26px;height:2px;background:#111;border-radius:2px;display:block;margin:0 auto;transition:transform .3s ease,opacity .3s ease;transform-origin:center}
+  .bubble-menu .menu-line+.menu-line{margin-top:6px}
+  .bubble-menu .menu-btn.open .menu-line:first-child{transform:translateY(4px) rotate(45deg)}
+  .bubble-menu .menu-btn.open .menu-line:last-child{transform:translateY(-4px) rotate(-45deg)}
+  @media(min-width:768px){.bubble-menu .bubble{--bubble-size:56px}.bubble-menu .logo-bubble{padding:0 16px}}
+  .bubble-menu-items{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:auto;z-index:98;background:rgba(9,9,11,.6);backdrop-filter:blur(4px)}
+  .bubble-menu-items.fixed{position:fixed}
+  .bubble-menu-items .pill-list{list-style:none;margin:0 auto;padding:0 24px;display:flex;flex-wrap:wrap;gap:0;row-gap:4px;width:100%;max-width:1600px;pointer-events:auto;justify-content:stretch}
+  .bubble-menu-items .pill-col{display:flex;justify-content:center;align-items:stretch;flex:0 0 calc(100%/3);box-sizing:border-box}
+  .bubble-menu-items .pill-col:nth-child(4):nth-last-child(2){margin-left:calc(100%/6)}
+  .bubble-menu-items .pill-col:nth-child(4):last-child{margin-left:calc(100%/3)}
+  .bubble-menu-items .pill-link{--pill-bg:#ffffff;--pill-color:#111;--pill-border:rgba(0,0,0,.12);--item-rot:0deg;--pill-min-h:160px;--hover-bg:#f3f4f6;--hover-color:#111;width:100%;min-height:var(--pill-min-h);padding:clamp(1.5rem,3vw,8rem) 0;font-size:clamp(1.5rem,4vw,4rem);font-weight:400;line-height:0;border-radius:999px;background:var(--pill-bg);color:var(--pill-color);text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;position:relative;transition:background .3s ease,color .3s ease;will-change:transform;box-sizing:border-box;white-space:nowrap;overflow:hidden;height:10px}
+  @media(min-width:900px){.bubble-menu-items .pill-link{transform:rotate(var(--item-rot))}}
+  .bubble-menu-items .pill-link .pill-label{display:inline-block;will-change:transform,opacity;height:1.2em;line-height:1.2}
+  @media(max-width:899px){.bubble-menu-items{align-items:flex-start;padding-top:120px}.bubble-menu-items .pill-list{row-gap:16px}.bubble-menu-items .pill-col{flex:0 0 100%;margin-left:0!important;overflow:visible}.bubble-menu-items .pill-link{font-size:clamp(1.2rem,3vw,4rem);padding:clamp(1rem,2vw,2rem) 0;min-height:80px}}
+  /* 原工程 .vs-bubble 定位（避开移动端底栏） */
+  .vs-bubble{position:fixed;top:auto;bottom:1.5rem;left:auto;right:1.5rem;width:auto;padding:0;justify-content:flex-end;gap:12px;z-index:100}
+  @media(max-width:767px){.vs-bubble{bottom:4.75rem}}
+
+  /* ---------- 移动端底部导航 ---------- */
+  .bottom-nav{display:none}
+  @media(max-width:767px){
+    .tabs{display:none}
+    .bottom-nav{position:fixed;left:0;right:0;bottom:0;z-index:70;display:flex;justify-content:space-around;background:rgba(9,9,11,.95);border-top:1px solid var(--border);padding:8px 0;backdrop-filter:blur(10px)}
+    .bottom-nav a{flex:1;text-align:center;color:var(--muted);font-size:11px;display:flex;flex-direction:column;align-items:center;gap:3px}
+    .bottom-nav a.active{color:var(--red)}
+    .bottom-nav a .i{font-size:18px}
+    main{padding-bottom:80px}
+  }
+  .empty{text-align:center;color:var(--muted);padding:50px 0}
+  .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#fff;color:#111;padding:10px 18px;border-radius:999px;font-size:14px;z-index:300;opacity:0;transition:.25s;box-shadow:var(--shadow)}
+  .toast.show{opacity:1}
+  .num{color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="dot"></span>VidSpark</div>
+  <nav class="tabs" id="tabs">
+    <button class="tab" data-go="home">首页</button>
+    <button class="tab" data-go="popular">热门</button>
+    <button class="tab" data-go="categories">分区</button>
+    <button class="tab" data-go="upload">上传</button>
+    <button class="tab" data-go="feed">动态</button>
+  </nav>
+  <div class="search"><input id="searchInput" placeholder="搜索标题 / UP主 / 标签… (回车)" /></div>
+</header>
+
+<main id="view"></main>
+
+<!-- ============ 悬浮气泡导航（移植自 react-bits BubbleMenu + GSAP） ============ -->
+<nav class="bubble-menu fixed vs-bubble" aria-label="Main navigation">
+  <div class="bubble logo-bubble" id="bmLogo" aria-label="Logo" style="display:none" onclick="menuLogo()">
+    <span class="logo-content"><span style="font-weight:800;color:#ef4444">VidSpark</span></span>
+  </div>
+  <button type="button" class="bubble toggle-bubble menu-btn" id="bmToggle" aria-label="Toggle menu" aria-pressed="false">
+    <span class="menu-line"></span><span class="menu-line short"></span>
+  </button>
+</nav>
+<div class="bubble-menu-items fixed" id="bmOverlay" style="display:none">
+  <ul class="pill-list" role="menu">
+    <li class="pill-col"><a class="pill-link" href="#" style="--item-rot:-8deg;--pill-bg:#27272a;--pill-color:#fafafa;--hover-bg:#ef4444;--hover-color:#fff" onclick="menuGo('home',event)"><span class="pill-label">首页</span></a></li>
+    <li class="pill-col"><a class="pill-link" href="#" style="--item-rot:8deg;--pill-bg:#27272a;--pill-color:#fafafa;--hover-bg:#f97316;--hover-color:#fff" onclick="menuGo('popular',event)"><span class="pill-label">热门</span></a></li>
+    <li class="pill-col"><a class="pill-link" href="#" style="--item-rot:8deg;--pill-bg:#27272a;--pill-color:#fafafa;--hover-bg:#8b5cf6;--hover-color:#fff" onclick="menuGo('categories',event)"><span class="pill-label">分区</span></a></li>
+    <li class="pill-col"><a class="pill-link" href="#" style="--item-rot:8deg;--pill-bg:#27272a;--pill-color:#fafafa;--hover-bg:#22c55e;--hover-color:#fff" onclick="menuGo('upload',event)"><span class="pill-label">上传</span></a></li>
+    <li class="pill-col"><a class="pill-link" href="#" style="--item-rot:-8deg;--pill-bg:#27272a;--pill-color:#fafafa;--hover-bg:#3b82f6;--hover-color:#fff" onclick="menuGo('feed',event)"><span class="pill-label">动态</span></a></li>
+  </ul>
+</div>
+
+<nav class="bottom-nav" id="bottomNav">
+  <a data-go="home"><span class="i">🏠</span>首页</a>
+  <a data-go="popular"><span class="i">🔥</span>热门</a>
+  <a data-go="categories"><span class="i">🗂</span>分区</a>
+  <a data-go="upload"><span class="i">⬆️</span>上传</a>
+  <a data-go="feed"><span class="i">📡</span>动态</a>
+</nav>
+
+<div class="modal-mask" id="detailMask"><div class="detail-wrap" id="detailWrap"></div></div>
+<div class="toast" id="toast"></div>
+
+<!-- GSAP（原 BubbleMenu 依赖；离线时自动降级为直接显隐） -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+/* ===================== 数据 ===================== */
+const CATEGORIES=[{key:'all',name:'全部'},{key:'music',name:'音乐'},{key:'game',name:'游戏'},{key:'knowledge',name:'知识'},{key:'funny',name:'搞笑'},{key:'food',name:'美食'},{key:'life',name:'生活'}];
+const COLORS=['#667eea,#764ba2','#f6d365,#fda085','#ff9a9e,#fecfef','#0f2027,#2c5364','#1f4037,#99f2c8','#ee0979,#ff6a00','#11998e,#38ef7d','#ffafbd,#ffc3a0','#36d1dc,#5b86e5','#cc2b5e,#753a88','#f7971e,#ffd200','#8e2de2,#4a00e0'];
+function V(id,title,author,views,viewsNum,duration,cat,published,tags){return{id,title,author,views,viewsNum,duration,cover:`linear-gradient(135deg,${COLORS[(id-1)%COLORS.length]})`,category:cat,publishedAt:published,tags:tags||[]};}
+let VIDEOS=[
+  V(1,'雨夜老城区漫步','城市漫游者','12.4万',124000,'08:24','life','2天前',['治愈','城市','雨']),
+  V(2,'30分钟吉他指弹纯享','弦外之音','8.7万',87000,'30:12','music','5天前',['吉他','纯音乐','指弹']),
+  V(3,'猫咪大战吸尘器','喵星观察局','202万',2020000,'03:41','funny','1天前',['猫','搞笑','萌宠']),
+  V(4,'三分钟看懂黑洞熵','硬核科普菌','56万',560000,'05:58','knowledge','3天前',['科普','物理','黑洞']),
+  V(5,'赛博朋克城市夜骑','夜行者NEON','33万',330000,'12:07','life','4天前',['骑行','赛博朋克','夜景']),
+  V(6,'外婆的拿手菜：红烧肉','老饭骨传人','91万',910000,'15:33','food','6天前',['美食','家常菜','红烧肉']),
+  V(7,'电子木鱼：赛博功德+1','佛系青年','45万',450000,'02:10','funny','2天前',['解压','电子','木鱼']),
+  V(8,'用代码画一朵樱花','程序员小鹿','23万',230000,'09:45','knowledge','1周前',['编程','创意','前端']),
+  V(9,'原神枫丹跑图BGM钢琴版','琴键上的旅人','178万',1780000,'04:33','music','3天前',['钢琴','游戏音乐','原神']),
+  V(10,'出租屋爆改电竞房','装修刺客','66万',660000,'18:20','life','5天前',['装修','电竞','改造']),
+  V(11,'10分钟搞定一周减脂餐','健身餐研究所','54万',540000,'10:02','food','4天前',['减脂','健身餐','食谱']),
+  V(12,'复古街机厅巡礼','像素考古学家','39万',390000,'11:48','game','6天前',['街机','怀旧','游戏']),
+];
+const FEED_BASE=[
+  {type:'upload',user:'喵星观察局',text:'发布了新视频',target:'猫咪大战吸尘器'},
+  {type:'fav',user:'老饭骨传人',text:'收藏了你的视频',target:'雨夜老城区漫步'},
+  {type:'follow',user:'硬核科普菌',text:'关注了你'},
+];
+
+/* ===================== 持久化 ===================== */
+const LS={get(k,d){try{return JSON.parse(localStorage.getItem('vs_'+k))??d}catch{return d}},set(k,v){localStorage.setItem('vs_'+k,JSON.stringify(v))}};
+let liked=LS.get('liked',{}),coined=LS.get('coined',{}),faved=LS.get('faved',{}),followed=LS.get('followed',{});
+let userVideos=LS.get('userVideos',[]),searchHist=LS.get('searchHist',[]);
+function saveAll(){LS.set('liked',liked);LS.set('coined',coined);LS.set('faved',faved);LS.set('followed',followed);LS.set('userVideos',userVideos);LS.set('searchHist',searchHist);}
+function allVideos(){return[...userVideos,...VIDEOS]}
+function catName(k){return CATEGORIES.find(c=>c.key===k)?.name||''}
+
+const $=s=>document.querySelector(s);
+const view=$('#view');
+let state={page:'home',cat:'all',query:''};
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1400);}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function matchVideo(v,q){q=q.trim().toLowerCase();if(!q)return true;return[v.title,v.author,catName(v.category),...(v.tags||[])].join(' ').toLowerCase().includes(q);}
+
+function cardHTML(v,i){
+  const isL=!!liked[v.id],isF=!!faved[v.id];
+  const badge=v.userVideo?'<span class="badge">你的</span>':'';
+  return `<div class="card" data-play="${v.id}" style="animation-delay:${i*30}ms">${badge}
+    <div class="thumb" style="background:${v.cover}"><span>▶️</span><span class="cat">${catName(v.category)}</span><span class="dur">${v.duration}</span></div>
+    <div class="meta"><div class="ttl">${esc(v.title)}</div><div class="sub">@${esc(v.author)} · ${v.views}次观看 · ${v.publishedAt}</div></div>
+    <div class="actions">
+      <button class="mini ${isL?'on':''}" data-like="${v.id}" title="点赞">${isL?'❤️':'🤍'}</button>
+      <button class="mini ${isF?'on':''}" data-fav="${v.id}" title="收藏">${isF?'⭐':'☆'}</button>
+    </div></div>`;
+}
+
+/* ===================== 页面：首页（含 WebGL 慧眼） ===================== */
+function renderHome(){
+  const mine=userVideos;
+  view.innerHTML=`<section class="hero">
+      <canvas id="eye" width="600" height="600"></canvas>
+      <h1>发现你的下一个上头视频</h1>
+      <p>移动鼠标，这只"慧眼"会一直盯着你 👀（WebGL 真实着色器，与 React 版一致）</p>
+      <div class="cta"><button class="btn primary" data-go="categories">随便看看</button><button class="btn" data-go="upload">发布视频</button></div>
+    </section>
+    ${mine.length?`<div class="section-h">📤 你发布的视频</div><div class="grid">${mine.map((v,i)=>cardHTML(v,i)).join('')}</div>`:''}
+    <div class="section-h">✨ 今日推荐</div>
+    <div class="grid">${VIDEOS.map((v,i)=>cardHTML(v,i)).join('')}</div>`;
+  initEvilEye($('#eye'));
+}
+
+/* ===================== 页面：热门 ===================== */
+function renderPopular(){
+  const list=allVideos().slice().sort((a,b)=>b.viewsNum-a.viewsNum).slice(0,10);
+  const medal=['🥇','🥈','🥉'];
+  view.innerHTML=`<h1 class="page-title">🔥 全站热榜</h1><p class="page-sub">按播放量实时排序 · 含你上传的视频</p>
+    <div class="grid">${list.map((v,i)=>{const m=medal[i]?`<span class="badge">${medal[i]}</span>`:`<span class="badge">#${i+1}</span>`;return cardHTML(v,i).replace('<span class="badge">你的</span>',m);}).join('')}</div>`;
+}
+
+/* ===================== 页面：分区 / 搜索 ===================== */
+function renderCategories(){
+  const q=state.query.trim();
+  const filtered=allVideos().filter(v=>(state.cat==='all'||v.category===state.cat)&&matchVideo(v,q));
+  const showResults=q.length>0||state.cat!=='all';
+  const histHTML=searchHist.length?`<div class="hist"><span class="h">最近搜索：</span>${searchHist.map(h=>`<span class="tag" data-hist="${esc(h)}"><b>${esc(h)}</b><span class="x" data-delhist="${esc(h)}">✕</span></span>`).join('')}<span class="tag" data-clearhist style="cursor:pointer;color:var(--muted)">清空</span></div>`:'';
+  if(showResults){
+    view.innerHTML=`<h1 class="page-title">${q?`搜索 “${esc(q)}”`:catName(state.cat)}</h1><p class="page-sub">${filtered.length} 个结果 ${q?'（匹配标题/UP主/分区/标签）':''}</p>${histHTML}
+      ${filtered.length?`<div class="grid">${filtered.map((v,i)=>cardHTML(v,i)).join('')}</div>`:`<div class="empty">没有找到匹配的视频 🤔<br><span style="font-size:12px">试试别的关键词，或换个分区</span></div>`}`;
+  }else{
+    view.innerHTML=`<h1 class="page-title">🗂 分区</h1><p class="page-sub">选择一个分区，或上方搜索关键词</p>
+      <div class="catbar">${CATEGORIES.map(c=>`<button class="chip ${c.key==='all'?'active':''}" data-cat="${c.key}">${c.name}</button>`).join('')}</div>
+      <div class="grid">${VIDEOS.map((v,i)=>cardHTML(v,i)).join('')}</div>`;
+  }
+  bindCategories();
+}
+
+/* ===================== 页面：上传 ===================== */
+function renderUpload(){
+  view.innerHTML=`<h1 class="page-title">⬆️ 发布视频</h1><p class="page-sub">纯前端模拟：读取本地视频真实时长、封面预览，发布后流入全站</p>
+    <div class="form" id="upForm">
+      <div class="field"><label>视频文件（点击或拖拽）</label><div class="drop" id="drop">📁 点击选择视频，或拖拽到此处</div><input type="file" id="file" accept="video/*" hidden></div>
+      <div class="field"><label>封面图（可选）</label><div class="drop" id="coverDrop" style="padding:14px">🖼 点击选择封面</div><input type="file" id="coverFile" accept="image/*" hidden><div class="preview"><div class="pv" id="pv">无封面</div></div></div>
+      <div class="row"><div class="field"><label>标题 *</label><input type="text" id="title" placeholder="给视频起个标题"></div><div class="field"><label>UP主</label><input type="text" id="author" value="我"></div></div>
+      <div class="row"><div class="field"><label>分区</label><select id="cat">${CATEGORIES.filter(c=>c.key!=='all').map(c=>`<option value="${c.key}">${c.name}</option>`).join('')}</select></div><div class="field"><label>时长（自动识别）</label><input type="text" id="dur" placeholder="00:00" readonly></div></div>
+      <div class="field"><label>标签（逗号分隔）</label><input type="text" id="tags" placeholder="例如：美食, 家常菜"></div>
+      <div class="err" id="err"></div><div class="prog" id="prog"><i></i></div>
+      <div style="display:flex;gap:10px;margin-top:14px"><button class="btn primary" id="publish">发布视频</button><button class="btn" data-go="home">取消</button></div>
+    </div>`;
+  bindUpload();
+}
+
+/* ===================== 页面：动态 ===================== */
+function renderFeed(){
+  const items=[...userVideos.map(v=>({type:'upload',user:v.author,text:'发布了新视频',target:v.title})),...FEED_BASE];
+  view.innerHTML=`<h1 class="page-title">📡 动态</h1><p class="page-sub">关注的人与你的投稿</p>${items.map(it=>`<div class="feed-item"><div class="av">${esc(it.user.slice(0,1))}</div><div class="tx"><div class="u">@${esc(it.user)}</div><div class="c">${esc(it.text)}</div>${it.target?`<div class="tgt" data-play-title="${esc(it.target)}">🎬 ${esc(it.target)}</div>`:''}</div></div>`).join('')}`;
+}
+
+/* ===================== 播放页 ===================== */
+let dmTimer=null,progTimer=null,detailKeyHandler=null;
+function openDetail(id){
+  const v=allVideos().find(x=>x.id==id);if(!v)return;
+  const isL=!!liked[v.id],isC=!!coined[v.id],isF=!!faved[v.id],isFo=!!followed[v.author];
+  const rel=allVideos().filter(x=>x.id!=v.id).slice(0,4);
+  const cmts=[{n:'路人甲',t:'前排！画质绝了'},{n:'资深观众',t:'已三连，坐等更新'},{n:v.author,t:'谢谢大家支持～'}];
+  $('#detailWrap').innerHTML=`<div class="back"><button id="dBack">← 返回</button><span class="num">${v.views}次观看 · ${v.publishedAt}</span></div>
+    <div class="player" id="player"><div class="frame" style="background:${v.cover}"></div><div class="dm-layer" id="dmLayer"></div><div class="center"><button class="playbtn" id="playBtn">▶</button></div>
+      <div class="bar"><div class="track" id="track"><i id="progBar"></i></div><div class="time"><span id="cur">0:00</span><span>${v.duration}</span></div></div></div>
+    <div class="detail-head">${esc(v.title)}</div>
+    <div class="detail-author">@${esc(v.author)}<button class="follow ${isFo?'on':''}" id="followBtn">${isFo?'✓ 已关注':'+ 关注'}</button><span class="num">· ${catName(v.category)}</span></div>
+    <div class="acts">
+      <button class="act ${isL?'on':''}" id="likeBtn">${isL?'❤️ 已赞':'🤍 点赞'} <span class="num">${v.viewsNum?Math.round(v.viewsNum/200):0}</span></button>
+      <button class="act ${isC?'on':''}" id="coinBtn">${isC?'🪙 已投币':'🪙 投币'}</button>
+      <button class="act ${isF?'on':''}" id="favBtn">${isF?'⭐ 已收藏':'☆ 收藏'}</button>
+      <button class="act" id="shareBtn">🔗 分享</button></div>
+    <div class="comments"><div class="cmt-form"><input id="cmtInput" placeholder="发条友善的评论…"><button class="btn primary" id="cmtSend">发送</button></div>
+      <div id="cmtList">${cmts.map(c=>`<div class="cmt"><div class="av2">${esc(c.n.slice(0,1))}</div><div class="body"><div class="name">${esc(c.n)}</div><div class="txt">${esc(c.t)}</div></div></div>`).join('')}</div></div>
+    <div class="rel"><div class="section-h">📎 相关推荐</div><div class="grid">${rel.map((r,i)=>cardHTML(r,i)).join('')}</div></div>`;
+  $('#detailMask').classList.add('show');
+  initPlayer(v);
+  $('#dBack').onclick=closeDetail;
+  $('#likeBtn').onclick=()=>{toggle(liked,v.id);const on=!!liked[v.id];$('#likeBtn').className='act '+(on?'on':'');$('#likeBtn').innerHTML=(on?'❤️ 已赞':'🤍 点赞')+' <span class="num">'+Math.round(v.viewsNum/200)+(on?1:0)+'</span>';toast(on?'已点赞 ❤️':'已取消点赞');saveAll();};
+  $('#coinBtn').onclick=()=>{toggle(coined,v.id);const on=!!coined[v.id];$('#coinBtn').className='act '+(on?'on':'');$('#coinBtn').innerHTML=on?'🪙 已投币':'🪙 投币';toast(on?'投币+1 🪙':'已取消投币');saveAll();};
+  $('#favBtn').onclick=()=>{toggle(faved,v.id);const on=!!faved[v.id];$('#favBtn').className='act '+(on?'on':'');$('#favBtn').innerHTML=on?'⭐ 已收藏':'☆ 收藏';toast(on?'已收藏 ⭐':'已取消收藏');saveAll();syncCardMarks();};
+  $('#followBtn').onclick=()=>{toggle(followed,v.author);const on=!!followed[v.author];$('#followBtn').className='follow '+(on?'on':'');$('#followBtn').textContent=on?'✓ 已关注':'+ 关注';toast(on?'已关注 @'+v.author:'已取消关注');saveAll();};
+  $('#shareBtn').onclick=()=>{navigator.clipboard?.writeText(location.href);toast('链接已复制 🔗');};
+  $('#cmtSend').onclick=()=>{const inp=$('#cmtInput');const t=inp.value.trim();if(!t)return;$('#cmtList').insertAdjacentHTML('afterbegin',`<div class="cmt"><div class="av2">我</div><div class="body"><div class="name">我</div><div class="txt">${esc(t)}</div></div></div>`);inp.value='';toast('评论已发送');};
+  $('#cmtInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('#cmtSend').click();});
+  bindCardClicks($('#detailWrap'));
+  detailKeyHandler=e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;if(e.code==='Space'){e.preventDefault();$('#playBtn').click();}if(e.key==='Escape')closeDetail();};
+  document.addEventListener('keydown',detailKeyHandler);
+}
+function closeDetail(){$('#detailMask').classList.remove('show');clearInterval(dmTimer);clearInterval(progTimer);if(detailKeyHandler)document.removeEventListener('keydown',detailKeyHandler);render();}
+function initPlayer(v){
+  let playing=false,prog=0,dur=parseDur(v.duration);
+  const playBtn=$('#playBtn'),bar=$('#progBar'),cur=$('#cur'),track=$('#track'),layer=$('#dmLayer');
+  const danmus=['前方高能','太顶了','画质绝了','已三连','哈哈哈哈','学到了','催更','爷青回','awsl','名场面'];
+  function spawnDM(){const d=document.createElement('div');d.className='dm';d.textContent=danmus[Math.floor(Math.random()*danmus.length)];d.style.top=(10+Math.random()*60)+'%';d.style.color=['#fff','#fde047','#fca5a5','#93c5fd'][Math.floor(Math.random()*4)];layer.appendChild(d);let x=layer.clientWidth;const step=()=>{x-=2.2;d.style.transform=`translateX(${x}px)`;if(x<-200)d.remove();else requestAnimationFrame(step);};requestAnimationFrame(step);}
+  function setProg(p){prog=Math.max(0,Math.min(100,p));bar.style.width=prog+'%';cur.textContent=fmt(Math.round(prog/100*dur));}
+  playBtn.onclick=()=>{playing=!playing;playBtn.textContent=playing?'⏸':'▶';if(playing){dmTimer=setInterval(spawnDM,700);progTimer=setInterval(()=>{if(prog>=100){playing=false;playBtn.textContent='▶';clearInterval(dmTimer);clearInterval(progTimer);}else setProg(prog+1);},200);}else{clearInterval(dmTimer);clearInterval(progTimer);}};
+  track.onclick=e=>{const r=track.getBoundingClientRect();setProg((e.clientX-r.left)/r.width*100);};
+}
+function parseDur(s){const[m,sec]=s.split(':').map(Number);return m*60+sec;}
+function fmt(t){const m=Math.floor(t/60),s=t%60;return m+':'+String(s).padStart(2,'0');}
+
+/* ===================== EvilEye（移植自 react-bits，WebGL 真实着色器） ===================== */
+function hexToVec3(hex){const h=hex.replace('#','');return[parseInt(h.slice(0,2),16)/255,parseInt(h.slice(2,4),16)/255,parseInt(h.slice(4,6),16)/255];}
+function generateNoiseTexture(size){
+  const data=new Uint8Array(size*size*4);
+  function hash(x,y,s){let n=x*374761393+y*668265263+s*1274126177;n=Math.imul(n^(n>>>13),1274126177);return((n^(n>>>16))>>>0)/4294967296;}
+  function noise(px,py,freq,seed){const fx=(px/size)*freq,fy=(py/size)*freq,ix=Math.floor(fx),iy=Math.floor(fy),tx=fx-ix,ty=fy-iy,w=freq|0;
+    const v00=hash(((ix%w)+w)%w,((iy%w)+w)%w,seed),v10=hash((((ix+1)%w)+w)%w,((iy%w)+w)%w,seed),v01=hash(((ix%w)+w)%w,(((iy+1)%w)+w)%w,seed),v11=hash((((ix+1)%w)+w)%w,(((iy+1)%w)+w)%w,seed);
+    return v00*(1-tx)*(1-ty)+v10*tx*(1-ty)+v01*(1-tx)*ty+v11*tx*ty;}
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){let v=0,amp=0.4,totalAmp=0;for(let o=0;o<8;o++){const f=32*(1<<o);v+=amp*noise(x,y,f,o*31);totalAmp+=amp;amp*=0.65;}v/=totalAmp;v=(v-0.5)*2.2+0.5;v=Math.max(0,Math.min(1,v));const val=Math.round(v*255),i=(y*size+x)*4;data[i]=val;data[i+1]=val;data[i+2]=val;data[i+3]=255;}
+  return data;
+}
+const EE_VERT=`attribute vec2 uv;attribute vec2 position;varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position,0.0,1.0);}`;
+const EE_FRAG=`precision highp float;uniform float uTime;uniform vec3 uResolution;uniform sampler2D uNoiseTexture;uniform float uPupilSize;uniform float uIrisWidth;uniform float uGlowIntensity;uniform float uIntensity;uniform float uScale;uniform float uNoiseScale;uniform vec2 uMouse;uniform float uPupilFollow;uniform float uFlameSpeed;uniform vec3 uEyeColor;uniform vec3 uBgColor;
+void main(){vec2 uv=(gl_FragCoord.xy*2.0-uResolution.xy)/uResolution.y;uv/=uScale;float ft=uTime*uFlameSpeed;
+float polarRadius=length(uv)*2.0;float polarAngle=(2.0*atan(uv.x,uv.y))/6.28*0.3;vec2 polarUv=vec2(polarRadius,polarAngle);
+vec4 noiseA=texture2D(uNoiseTexture,polarUv*vec2(0.2,7.0)*uNoiseScale+vec2(-ft*0.1,0.0));
+vec4 noiseB=texture2D(uNoiseTexture,polarUv*vec2(0.3,4.0)*uNoiseScale+vec2(-ft*0.2,0.0));
+vec4 noiseC=texture2D(uNoiseTexture,polarUv*vec2(0.1,5.0)*uNoiseScale+vec2(-ft*0.1,0.0));
+float distanceMask=1.0-length(uv);
+float innerRing=clamp(-1.0*((distanceMask-0.7)/uIrisWidth),0.0,1.0);innerRing=(innerRing*distanceMask-0.2)/0.28;innerRing+=noiseA.r-0.5;innerRing*=1.3;innerRing=clamp(innerRing,0.0,1.0);
+float outerRing=clamp(-1.0*((distanceMask-0.5)/0.2),0.0,1.0);outerRing=(outerRing*distanceMask-0.1)/0.38;outerRing+=noiseC.r-0.5;outerRing*=1.3;outerRing=clamp(outerRing,0.0,1.0);
+innerRing+=outerRing;
+float innerEye=distanceMask-0.1*2.0;innerEye*=noiseB.r*2.0;
+vec2 pupilOffset=uMouse*uPupilFollow*0.12;vec2 pupilUv=uv-pupilOffset;float pupil=1.0-length(pupilUv*vec2(9.0,2.3));pupil*=uPupilSize;pupil=clamp(pupil,0.0,1.0);pupil/=0.35;
+float outerEyeGlow=1.0-length(uv*vec2(0.5,1.5));outerEyeGlow=clamp(outerEyeGlow+0.5,0.0,1.0);outerEyeGlow+=noiseC.r-0.5;float outerBgGlow=outerEyeGlow;outerEyeGlow=pow(outerEyeGlow,2.0);outerEyeGlow+=distanceMask;outerEyeGlow*=uGlowIntensity;outerEyeGlow=clamp(outerEyeGlow,0.0,1.0);outerEyeGlow*=pow(1.0-distanceMask,2.0)*2.5;
+outerBgGlow+=distanceMask;outerBgGlow=pow(outerBgGlow,0.5);outerBgGlow*=0.15;
+vec3 color=uEyeColor*uIntensity*clamp(max(innerRing+innerEye,outerEyeGlow+outerBgGlow)-pupil,0.0,3.0);color+=uBgColor;
+gl_FragColor=vec4(color,1.0);}`;
+function initEvilEye(canvas){
+  if(!canvas)return;
+  const gl=canvas.getContext('webgl',{alpha:true,premultipliedAlpha:false});
+  if(!gl){canvas.style.background='radial-gradient(circle,#FF6F37,#000)';return;}
+  gl.clearColor(0,0,0,0);
+  function compile(t,src){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);return s;}
+  const prog=gl.createProgram();
+  gl.attachShader(prog,compile(gl.VERTEX_SHADER,EE_VERT));
+  gl.attachShader(prog,compile(gl.FRAGMENT_SHADER,EE_FRAG));
+  gl.linkProgram(prog);gl.useProgram(prog);
+  const pos=new Float32Array([-1,-1,3,-1,-1,3]);const uv=new Float32Array([0,0,2,0,0,2]);
+  const pb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pb);gl.bufferData(gl.ARRAY_BUFFER,pos,gl.STATIC_DRAW);
+  const pl=gl.getAttribLocation(prog,'position');gl.enableVertexAttribArray(pl);gl.vertexAttribPointer(pl,2,gl.FLOAT,false,0,0);
+  const ub=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,ub);gl.bufferData(gl.ARRAY_BUFFER,uv,gl.STATIC_DRAW);
+  const ul=gl.getAttribLocation(prog,'uv');gl.enableVertexAttribArray(ul);gl.vertexAttribPointer(ul,2,gl.FLOAT,false,0,0);
+  const noiseData=generateNoiseTexture(256);
+  const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,256,256,0,gl.RGBA,gl.UNSIGNED_BYTE,noiseData);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
+  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.uniform1i(gl.getUniformLocation(prog,'uNoiseTexture'),0);
+  const U=n=>gl.getUniformLocation(prog,n);
+  gl.uniform1f(U('uPupilSize'),0.6);gl.uniform1f(U('uIrisWidth'),0.25);gl.uniform1f(U('uGlowIntensity'),0.35);
+  gl.uniform1f(U('uIntensity'),1.5);gl.uniform1f(U('uScale'),0.8);gl.uniform1f(U('uNoiseScale'),1.0);
+  gl.uniform1f(U('uPupilFollow'),1.0);gl.uniform1f(U('uFlameSpeed'),1.0);
+  gl.uniform3fv(U('uEyeColor'),hexToVec3('#FF6F37'));gl.uniform3fv(U('uBgColor'),hexToVec3('#000000'));
+  const mouse={x:0,y:0,tx:0,ty:0};
+  canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect();mouse.tx=((e.clientX-r.left)/r.width)*2-1;mouse.ty=-(((e.clientY-r.top)/r.height)*2-1);});
+  canvas.addEventListener('mouseleave',()=>{mouse.tx=0;mouse.ty=0;});
+  function resize(){const dpr=Math.min(window.devicePixelRatio||1,2);const w=canvas.clientWidth||300,h=canvas.clientHeight||300;canvas.width=w*dpr;canvas.height=h*dpr;gl.viewport(0,0,canvas.width,canvas.height);gl.uniform3f(U('uResolution'),canvas.width,canvas.height,canvas.width/canvas.height);}
+  window.addEventListener('resize',resize);resize();
+  function update(t){requestAnimationFrame(update);mouse.x+=(mouse.tx-mouse.x)*0.05;mouse.y+=(mouse.ty-mouse.y)*0.05;gl.uniform1f(U('uTime'),t*0.001);gl.uniform2f(U('uMouse'),mouse.x,mouse.y);gl.clear(gl.COLOR_BUFFER_BIT);gl.drawArrays(gl.TRIANGLES,0,3);}
+  requestAnimationFrame(update);
+}
+
+/* ===================== 交互辅助 ===================== */
+function toggle(o,k){if(o[k])delete o[k];else o[k]=1;}
+function syncCardMarks(){document.querySelectorAll('[data-like]').forEach(b=>{const on=!!liked[b.dataset.like];b.className='mini '+(on?'on':'');b.textContent=on?'❤️':'🤍';});document.querySelectorAll('[data-fav]').forEach(b=>{const on=!!faved[b.dataset.fav];b.className='mini '+(on?'on':'');b.textContent=on?'⭐':'☆';});}
+function bindCardClicks(root){
+  root.querySelectorAll('[data-play]').forEach(el=>el.onclick=e=>{if(e.target.closest('[data-like],[data-fav]'))return;openDetail(el.dataset.play);});
+  root.querySelectorAll('[data-like]').forEach(b=>b.onclick=e=>{e.stopPropagation();toggle(liked,b.dataset.like);const on=!!liked[b.dataset.like];b.className='mini '+(on?'on':'');b.textContent=on?'❤️':'🤍';toast(on?'已点赞 ❤️':'已取消点赞');saveAll();});
+  root.querySelectorAll('[data-fav]').forEach(b=>b.onclick=e=>{e.stopPropagation();toggle(faved,b.dataset.fav);const on=!!faved[b.dataset.fav];b.className='mini '+(on?'on':'');b.textContent=on?'⭐':'☆';toast(on?'已收藏 ⭐':'已取消收藏');saveAll();});
+}
+function bindCategories(){
+  view.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{state.cat=b.dataset.cat;renderCategories();});
+  view.querySelectorAll('[data-hist]').forEach(t=>t.onclick=()=>{state.query=t.dataset.hist;$('#searchInput').value=t.dataset.hist;renderCategories();});
+  view.querySelectorAll('[data-delhist]').forEach(x=>x.onclick=e=>{e.stopPropagation();searchHist=searchHist.filter(h=>h!==x.dataset.delhist);saveAll();renderCategories();});
+  view.querySelectorAll('[data-clearhist]').forEach(x=>x.onclick=()=>{searchHist=[];saveAll();renderCategories();});
+  bindCardClicks(view);
+}
+
+/* ===================== 上传绑定 ===================== */
+function bindUpload(){
+  const fileIn=$('#file'),drop=$('#drop'),coverIn=$('#coverFile'),coverDrop=$('#coverDrop'),pv=$('#pv'),durIn=$('#dur'),err=$('#err'),prog=$('#prog');
+  let videoFile=null,coverURL=null;
+  drop.onclick=()=>fileIn.click();coverDrop.onclick=()=>coverIn.click();
+  [drop,coverDrop].forEach(d=>{['dragover','dragenter'].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.add('drag');}));['dragleave','drop'].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.remove('drag');}));});
+  drop.addEventListener('drop',e=>{if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
+  coverDrop.addEventListener('drop',e=>{if(e.dataTransfer.files[0])handleCover(e.dataTransfer.files[0]);});
+  fileIn.onchange=e=>{if(e.target.files[0])handleFile(e.target.files[0]);};
+  coverIn.onchange=e=>{if(e.target.files[0])handleCover(e.target.files[0]);};
+  function handleFile(f){videoFile=f;err.textContent='';const url=URL.createObjectURL(f);const vid=document.createElement('video');vid.preload='metadata';vid.src=url;vid.onloadedmetadata=()=>{durIn.value=fmt(Math.round(vid.duration));URL.revokeObjectURL(url);};drop.innerHTML='🎬 '+esc(f.name);}
+  function handleCover(f){coverURL=URL.createObjectURL(f);const img=new Image();img.onload=()=>{pv.innerHTML='';pv.appendChild(img);img.style.cssText='width:100%;height:100%;object-fit:cover';};img.src=coverURL;coverDrop.innerHTML='🖼 '+esc(f.name);}
+  $('#publish').onclick=()=>{const title=$('#title').value.trim();if(!title){err.textContent='⚠️ 标题不能为空';return;}if(!videoFile){err.textContent='⚠️ 请先选择视频文件';return;}err.textContent='';prog.style.display='block';const bar=prog.firstElementChild;let p=0;const t=setInterval(()=>{p+=8;bar.style.width=p+'%';if(p>=100){clearInterval(t);const id=Date.now();const newV={id,title,author:$('#author').value.trim()||'我',views:'0',viewsNum:0,duration:durIn.value||'00:00',cover:coverURL?`url(${coverURL}) center/cover`:`linear-gradient(135deg,${COLORS[id%COLORS.length]})`,category:$('#cat').value,publishedAt:'刚刚',tags:$('#tags').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean),userVideo:true};userVideos.unshift(newV);saveAll();toast('发布成功 🎉');setTimeout(()=>go('home'),600);}},90);};
+}
+
+/* ===================== 路由 ===================== */
+function go(page,query){
+  state.page=page;state.query=(query!==undefined)?query:(page==='categories'?state.query:'');
+  if(page!=='categories')state.query='';
+  $('#detailMask').classList.remove('show');render();window.scrollTo(0,0);
+}
+function render(){
+  ({home:renderHome,popular:renderPopular,categories:renderCategories,upload:renderUpload,feed:renderFeed}[state.page]||renderHome)();
+  bindCardClicks(view);
+  document.querySelectorAll('.tab,.bottom-nav a').forEach(t=>t.classList.toggle('active',t.dataset.go===state.page));
+}
+
+/* ===================== BubbleMenu 控制器（GSAP 移植） ===================== */
+let menuOpen=false,showOverlayBM=false;
+const bmOverlay=$('#bmOverlay'),bmBubbles=[...bmOverlay.querySelectorAll('.pill-link')],bmLabels=[...bmOverlay.querySelectorAll('.pill-label')],bmToggle=$('#bmToggle'),bmLogo=$('#bmLogo');
+const BM_ROT=[-8,8,8,8,-8];
+function bmOpen(){
+  menuOpen=true;showOverlayBM=true;bmLogo.style.display='inline-flex';bmToggle.classList.add('open');bmToggle.setAttribute('aria-pressed','true');
+  if(window.gsap){
+    gsap.set(bmOverlay,{display:'flex'});gsap.killTweensOf([...bmBubbles,...bmLabels]);
+    gsap.set(bmBubbles,{scale:0,transformOrigin:'50% 50%'});gsap.set(bmLabels,{y:24,autoAlpha:0});
+    bmBubbles.forEach((b,i)=>{const delay=i*0.12+gsap.utils.random(-0.05,0.05);const tl=gsap.timeline({delay});
+      tl.to(b,{scale:1,duration:0.5,ease:'back.out(1.5)'});
+      if(bmLabels[i])tl.to(bmLabels[i],{y:0,autoAlpha:1,duration:0.5,ease:'power3.out'},'-='+(0.5*0.9));});
+  }else{bmOverlay.style.display='flex';bmBubbles.forEach(b=>b.style.transform='scale(1)');bmLabels.forEach(l=>{l.style.opacity=1;l.style.transform='none';});}
+}
+function bmClose(){
+  menuOpen=false;bmToggle.classList.remove('open');bmToggle.setAttribute('aria-pressed','false');bmLogo.style.display='none';
+  if(window.gsap){
+    gsap.killTweensOf([...bmBubbles,...bmLabels]);
+    gsap.to(bmLabels,{y:24,autoAlpha:0,duration:0.2,ease:'power3.in'});
+    gsap.to(bmBubbles,{scale:0,duration:0.2,ease:'power3.in',onComplete:()=>{bmOverlay.style.display='none';showOverlayBM=false;}});
+  }else{bmOverlay.style.display='none';}
+}
+function menuGo(page,e){e.preventDefault();go(page);bmClose();}
+function menuLogo(){go('home');bmClose();}
+bmToggle.onclick=()=>{menuOpen?bmClose():bmOpen();};
+bmOverlay.onclick=()=>bmClose();
+window.addEventListener('resize',()=>{if(menuOpen){const desk=window.innerWidth>=900;bmBubbles.forEach((b,i)=>{const r=desk?(BM_ROT[i]||0):0;if(window.gsap)gsap.set(b,{rotation:r});else b.style.transform=`scale(1) rotate(${r}deg)`;});}});
+
+/* ===================== 全局事件 ===================== */
+document.addEventListener('click',e=>{
+  const goEl=e.target.closest('[data-go]');if(goEl){go(goEl.dataset.go);return;}
+  const pht=e.target.closest('[data-play-title]');if(pht){const v=allVideos().find(x=>x.title===pht.dataset.playTitle);if(v)openDetail(v.id);return;}
+});
+document.querySelectorAll('.tabs .tab').forEach(t=>t.onclick=()=>go(t.dataset.go));
+document.querySelectorAll('.bottom-nav a').forEach(t=>t.onclick=()=>go(t.dataset.go));
+$('#searchInput').addEventListener('keydown',e=>{if(e.key==='Enter'){const q=e.target.value.trim();if(q){searchHist=[q,...searchHist.filter(h=>h!==q)].slice(0,8);saveAll();}go('categories',q);}});
+
+/* ===================== 启动 ===================== */
+go('home');
+</script>
+</body>
+</html>
