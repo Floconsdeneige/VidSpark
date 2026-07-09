@@ -133,3 +133,8 @@ export function useInteractions(): InteractionsCtx {
   if (!c) throw new Error('useInteractions 必须在 InteractionsProvider 内使用')
   return c
 }
+
+/** 读取任意账号的互动数据（点赞/投币/收藏/关注/稍后再看），供「动态」跨账号聚合用，只读不写。 */
+export function readAccountInteractions(id: string): Interactions {
+  return load(id)
+}

@@ -4,6 +4,7 @@ import { useInteractions } from '@/hooks/useInteractions'
 import { useAccount } from '@/hooks/useAccount'
 import { useSocial } from '@/hooks/useSocial'
 import { readAccountUploads } from '@/hooks/useLibrary'
+import { readAccountInteractions } from '@/hooks/useInteractions'
 
 type FItem = {
   key: string
@@ -52,6 +53,10 @@ export default function FeedPage({
 
   const items = useMemo<FItem[]>(() => {
     const out: FItem[] = []
+    const followedAccounts = social.followingList(activeId ?? '')
+    const followedIds = new Set(followedAccounts.map((a) => a.id))
+    const followedSet = new Set(followed)
+    const myIds = new Set(userUploads.map((u) => u.id))
 
     // 1) 我的投稿（最新在前）
     userUploads.forEach((v) => {
@@ -65,10 +70,20 @@ export default function FeedPage({
       })
     })
 
-    // 2) 我关注的 UP 主投稿（按作者名 或 真实账号 id 命中，改名后仍可见）
-    const followedSet = new Set(followed)
-    const followedIds = new Set(social.followingList(activeId ?? '').map((a) => a.id))
-    const myIds = new Set(userUploads.map((u) => u.id))
+    // 2) 关注账号的投稿（读取其本地上传仓库，改名/重名也能命中）
+    followedAccounts.forEach((a) => {
+      readAccountUploads(a.id).forEach((v) => {
+        out.push({
+          key: `f-up-${a.id}-${v.id}`,
+          type: 'upload',
+          user: a.name,
+          avatar: a.avatar,
+          text: `发布了新视频《${v.title}》`,
+          targetVideo: v,
+        })
+      })
+    })
+    // 2b) 库内作者（按名字/账号 id 关注，多为预设作者）的投稿
     allVideos.forEach((v) => {
       if (!myIds.has(v.id) && (followedSet.has(v.author) || (v.authorId != null && followedIds.has(v.authorId)))) {
         out.push({
@@ -82,7 +97,31 @@ export default function FeedPage({
       }
     })
 
-    // 3) 我的关注行为
+    // 3) 关注账号的互动（B站动态双向化：TA 赞了/投币了/收藏了什么，进我的关注流）
+    const extraVideos = followedAccounts.flatMap((a) => readAccountUploads(a.id))
+    const resolve = (id: number) => allVideos.find((v) => v.id === id) ?? extraVideos.find((v) => v.id === id)
+    followedAccounts.forEach((a) => {
+      const inter = readAccountInteractions(a.id)
+      const pushFrom = (ids: number[], type: 'like' | 'coin' | 'fav') => {
+        ids.forEach((id) => {
+          const v = resolve(id)
+          if (v)
+            out.push({
+              key: `${type}-${a.id}-${id}`,
+              type,
+              user: a.name,
+              avatar: a.avatar,
+              text: `${VERB[type]}《${v.title}》`,
+              targetVideo: v,
+            })
+        })
+      }
+      pushFrom(inter.liked, 'like')
+      pushFrom(inter.coined, 'coin')
+      pushFrom(inter.faved, 'fav')
+    })
+
+    // 4) 我的关注行为
     followed.forEach((a) => {
       out.push({
         key: `follow-${a}`,
@@ -93,7 +132,7 @@ export default function FeedPage({
       })
     })
 
-    // 4) 我的互动（点赞 / 投币 / 收藏）
+    // 5) 我的互动（点赞 / 投币 / 收藏）
     const pushInteract = (ids: number[], type: 'like' | 'coin' | 'fav') => {
       ids.forEach((id) => {
         const v = allVideos.find((x) => x.id === id)
@@ -114,7 +153,7 @@ export default function FeedPage({
     pushInteract(faved, 'fav')
 
     return out
-  }, [allVideos, userUploads, liked, coined, faved, followed, account.name, account.avatar])
+  }, [allVideos, userUploads, liked, coined, faved, followed, account.name, account.avatar, social, activeId])
 
   // 朋友：仅互关（双向关注）账号的投稿（抖音「朋友」流）
   const friendsItems = useMemo<FItem[]>(() => {

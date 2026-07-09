@@ -12,11 +12,13 @@ export default function AccountProfile({
   onClose,
   onPlay,
   onOpenAccount,
+  onMessage,
 }: {
   accountId: string | null
   onClose: () => void
   onPlay: (v: Video) => void
   onOpenAccount: (id: string) => void
+  onMessage?: (id: string) => void
 }) {
   const { accounts, activeId } = useAccount()
   const social = useSocial()
@@ -82,6 +84,15 @@ export default function AccountProfile({
               </button>
             )}
             {isMe && <span className="shrink-0 rounded-full bg-card px-4 py-2 text-sm text-muted-foreground">这是你</span>}
+            {!isMe && onMessage && (
+              <button
+                onClick={() => onMessage(acc.id)}
+                className="shrink-0 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:bg-card"
+                title="发私信"
+              >
+                ✉️ 私信
+              </button>
+            )}
           </div>
 
           {/* 统计 */}

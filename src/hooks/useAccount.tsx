@@ -17,7 +17,7 @@ import {
 
 export type Notification = {
   id: string
-  type: 'follow' | 'comment' | 'reply' | 'like' | 'coin' | 'fav'
+  type: 'follow' | 'comment' | 'reply' | 'like' | 'coin' | 'fav' | 'mention'
   fromId?: string
   fromName: string
   text: string
@@ -25,6 +25,24 @@ export type Notification = {
   read: boolean
   videoId?: number
   videoTitle?: string
+}
+
+/** 一条私信（本地账号间一对一聊天） */
+export type DM = {
+  id: string
+  fromId: string
+  fromName: string
+  text: string
+  ts: number
+  read: boolean
+}
+
+/** 与一个对端的会话（消息按时间顺序） */
+export type Conversation = {
+  peerId: string
+  peerName: string
+  peerAvatar: string
+  messages: DM[]
 }
 
 /** 收藏夹（B站式：收藏可按命名文件夹分组管理） */
@@ -43,10 +61,12 @@ export type Account = {
   following: string[]
   /** 关注本账号的账号 id 列表（社交图的另一面 = 粉丝） */
   followers: string[]
-  /** 本账号收到的通知（关注 / 评论 / 回复 / 点赞 / 投币 / 收藏） */
+  /** 本账号收到的通知（关注 / 评论 / 回复 / 点赞 / 投币 / 收藏 / @提及） */
   notifications: Notification[]
   /** 收藏夹列表；每个账号至少含一个「默认收藏夹」 */
   favFolders: FavFolder[]
+  /** 私信会话列表（与每个对端一个会话，消息按时间顺序） */
+  dmConversations: Conversation[]
 }
 
 type Store = { accounts: Account[]; activeId: string | null }
@@ -63,13 +83,32 @@ const GUEST: Account = {
   followers: [],
   notifications: [],
   favFolders: [{ id: 'default', name: '默认收藏夹', videoIds: [] }],
+  dmConversations: [],
 }
 
 function newId(): string {
   return `id-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 }
 
-// 归一化：兼容旧账号（无 following/followers/notifications/favFolders 字段）默认补空，避免读 undefined。
+// 把一条消息写入（或新建）与 peerId 的会话，并把该会话置顶。
+function upsertConv(
+  list: Conversation[],
+  peerId: string,
+  peerName: string,
+  peerAvatar: string,
+  msg: DM,
+): Conversation[] {
+  const idx = list.findIndex((c) => c.peerId === peerId)
+  const conv: Conversation = idx === -1
+    ? { peerId, peerName, peerAvatar, messages: [msg] }
+    : { ...list[idx], peerName, peerAvatar, messages: [...list[idx].messages, msg] }
+  if (idx === -1) return [conv, ...list]
+  const next = list.slice()
+  next.splice(idx, 1)
+  return [conv, ...next]
+}
+
+// 归一化：兼容旧账号（无 following/followers/notifications/favFolders/dmConversations 字段）默认补空，避免读 undefined。
 function normalize(a: Partial<Account> & { id: string }): Account {
   const ff = Array.isArray(a.favFolders) ? a.favFolders.filter((f) => f && f.id) : []
   // 每个账号至少保留一个「默认收藏夹」，保证收藏动作有落点
@@ -85,6 +124,7 @@ function normalize(a: Partial<Account> & { id: string }): Account {
     followers: Array.isArray(a.followers) ? a.followers : [],
     notifications: Array.isArray(a.notifications) ? a.notifications.map((n) => ({ ...n })) : [],
     favFolders,
+    dmConversations: Array.isArray(a.dmConversations) ? a.dmConversations : [],
   }
 }
 
@@ -115,6 +155,7 @@ function load(): Store {
     followers: [],
     notifications: [],
     favFolders: [{ id: 'default', name: '默认收藏夹', videoIds: [] }],
+    dmConversations: [],
   }
   const store: Store = { accounts: [seeded], activeId: DEFAULT_ID }
   try {
@@ -169,6 +210,17 @@ export type AccountCtx = {
   notifications: Notification[]
   unreadCount: number
   markNotificationsRead: () => void
+  // —— 私信（DM，本地账号间一对一聊天） ——
+  /** 当前账号的私信会话列表 */
+  dmConversations: Conversation[]
+  /** 当前账号的未读私信总数 */
+  dmUnreadCount: number
+  /** 向 targetId 发送一条私信（同时写入双方会话，对方标记为未读） */
+  sendDM: (targetId: string, text: string) => void
+  /** 把与 peerId 的会话全部标记为已读 */
+  markDMRead: (peerId: string) => void
+  /** 取出与 peerId 的会话（无则 undefined） */
+  getConversation: (peerId: string) => Conversation | undefined
 }
 
 const Ctx = createContext<AccountCtx | null>(null)
@@ -203,6 +255,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       followers: [],
       notifications: [],
       favFolders: [{ id: 'default', name: '默认收藏夹', videoIds: [] }],
+      dmConversations: [],
     }
       setStore((s) => ({ accounts: [...s.accounts, acc], activeId: acc.id }))
       return acc.id
@@ -367,6 +420,51 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         ),
       }))
     },
+
+    // —— 私信（DM） ——
+    dmConversations: activeAccount?.dmConversations ?? [],
+    dmUnreadCount: (activeAccount?.dmConversations ?? []).reduce(
+      (n, c) => n + c.messages.filter((m) => !m.read).length,
+      0,
+    ),
+    sendDM: (targetId, text) => {
+      const t = text.trim()
+      if (!activeId || targetId === activeId || !t) return
+      const me = activeAccount
+      const target = accounts.find((a) => a.id === targetId)
+      if (!me || !target) return
+      const msg: DM = { id: newId(), fromId: activeId, fromName: me.name, text: t, ts: Date.now(), read: true }
+      const theirMsg: DM = { ...msg, read: false }
+      setStore((s) => ({
+        ...s,
+        accounts: s.accounts.map((a) => {
+          if (a.id === activeId)
+            return { ...a, dmConversations: upsertConv(a.dmConversations, targetId, target.name, target.avatar, msg) }
+          if (a.id === targetId)
+            return { ...a, dmConversations: upsertConv(a.dmConversations, activeId, me.name, me.avatar, theirMsg) }
+          return a
+        }),
+      }))
+    },
+    markDMRead: (peerId) => {
+      if (!activeId) return
+      setStore((s) => ({
+        ...s,
+        accounts: s.accounts.map((a) =>
+          a.id === activeId
+            ? {
+                ...a,
+                dmConversations: a.dmConversations.map((c) =>
+                  c.peerId === peerId
+                    ? { ...c, messages: c.messages.map((m) => ({ ...m, read: true })) }
+                    : c,
+                ),
+              }
+            : a,
+        ),
+      }))
+    },
+    getConversation: (peerId) => activeAccount?.dmConversations.find((c) => c.peerId === peerId),
   }
 
   return <Ctx.Provider value={ctx}>{children}</Ctx.Provider>

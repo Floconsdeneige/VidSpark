@@ -96,5 +96,11 @@ export function useSocial() {
     notifications: acc.notifications,
     unreadCount: acc.unreadCount,
     markNotificationsRead: acc.markNotificationsRead,
+    // 私信（DM）
+    sendDM: acc.sendDM,
+    dmConversations: acc.dmConversations,
+    dmUnreadCount: acc.dmUnreadCount,
+    markDMRead: acc.markDMRead,
+    getConversation: acc.getConversation,
   }
 }

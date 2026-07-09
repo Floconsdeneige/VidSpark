@@ -15,6 +15,7 @@ import { LibraryProvider, useLibrary } from '@/hooks/useLibrary'
 import { useSocial } from '@/hooks/useSocial'
 import { ThemeProvider, useTheme } from '@/hooks/useTheme'
 import AccountProfile from '@/components/AccountProfile'
+import MessageCenter from '@/components/MessageCenter'
 import { videos as baseVideos, type Video } from '@/data/mock'
 
 type View = 'home' | 'popular' | 'categories' | 'upload' | 'feed' | 'profile' | 'settings' | 'detail'
@@ -60,6 +61,8 @@ function Shell() {
   const [detailVideo, setDetailVideo] = useState<Video | null>(null)
   const [notifOpen, setNotifOpen] = useState(false)
   const [profileAccountId, setProfileAccountId] = useState<string | null>(null)
+  const [dmOpen, setDmOpen] = useState(false)
+  const [dmPeerId, setDmPeerId] = useState<string | null>(null)
 
   const openNotif = () => {
     setNotifOpen((v) => !v)
@@ -222,7 +225,9 @@ function Shell() {
                               ? '❤️'
                               : n.type === 'coin'
                                 ? '🪙'
-                                : '⭐'}
+                                : n.type === 'mention'
+                                  ? '📣'
+                                  : '⭐'}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="font-semibold">@{n.fromName}</span>{' '}
@@ -238,6 +243,23 @@ function Shell() {
             </div>
           )}
         </div>
+
+        {/* 私信入口 */}
+        <button
+          onClick={() => {
+            setDmPeerId(null)
+            setDmOpen(true)
+          }}
+          title="私信"
+          className="relative rounded-full border border-border bg-card px-3 py-2 text-sm transition hover:bg-background"
+        >
+          ✉️
+          {social.dmUnreadCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+              {social.dmUnreadCount > 99 ? '99+' : social.dmUnreadCount}
+            </span>
+          )}
+        </button>
 
         <button
           onClick={() => go('upload')}
@@ -274,6 +296,18 @@ function Shell() {
         accountId={profileAccountId}
         onClose={() => setProfileAccountId(null)}
         onPlay={play}
+        onOpenAccount={setProfileAccountId}
+        onMessage={(id) => {
+          setDmPeerId(id)
+          setDmOpen(true)
+        }}
+      />
+
+      {/* 私信中心浮层 */}
+      <MessageCenter
+        open={dmOpen}
+        initialPeerId={dmPeerId}
+        onClose={() => setDmOpen(false)}
         onOpenAccount={setProfileAccountId}
       />
 

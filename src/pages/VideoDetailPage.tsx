@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import type { Video } from '@/data/mock'
 import { categories, formatViews, type Comment } from '@/data/mock'
 import { useInteractions } from '@/hooks/useInteractions'
@@ -174,14 +174,20 @@ export default function VideoDetailPage({
     })
   }
 
-  // 一键三连（B站签名）：确保点赞+投币+收藏全开，并向作者推三类通知
+  // 一键三连（B站签名）：确保点赞+投币+收藏全开。仅对「本次新发生」的动作推通知，避免重复。
   const doTriple = () => {
+    const wasLiked = isLiked(video.id)
+    const wasCoined = isCoined(video.id)
+    const wasFaved = social.isFaved(video.id)
     const changed = social.triple(video.id)
     if (changed) {
       if (authorAccount) {
-        social.pushNotification(authorAccount.id, { type: 'like', fromName: account.name, fromId: activeId ?? undefined, text: '赞了你的视频', videoId: video.id, videoTitle: video.title })
-        social.pushNotification(authorAccount.id, { type: 'coin', fromName: account.name, fromId: activeId ?? undefined, text: '投币了你的视频', videoId: video.id, videoTitle: video.title })
-        social.pushNotification(authorAccount.id, { type: 'fav', fromName: account.name, fromId: activeId ?? undefined, text: '收藏了你的视频', videoId: video.id, videoTitle: video.title })
+        if (!wasLiked)
+          social.pushNotification(authorAccount.id, { type: 'like', fromName: account.name, fromId: activeId ?? undefined, text: '赞了你的视频', videoId: video.id, videoTitle: video.title })
+        if (!wasCoined)
+          social.pushNotification(authorAccount.id, { type: 'coin', fromName: account.name, fromId: activeId ?? undefined, text: '投币了你的视频', videoId: video.id, videoTitle: video.title })
+        if (!wasFaved)
+          social.pushNotification(authorAccount.id, { type: 'fav', fromName: account.name, fromId: activeId ?? undefined, text: '收藏了你的视频', videoId: video.id, videoTitle: video.title })
       }
       showToast('已三连 ❤️🪙⭐')
       setBurst(true)
@@ -228,6 +234,51 @@ export default function VideoDetailPage({
     if (!t) return
     setSentDanmaku((prev) => [...prev, t])
     setDanmakuText('')
+  }
+
+  // @提及：解析评论中的 @昵称，向匹配到的真实账号（非自己）推送「@我」通知。
+  const pushMentions = (text: string, skipAccountId?: string) => {
+    const re = /@([^ @，。！？、；：]+)/g
+    const seen = new Set<string>()
+    let m: RegExpExecArray | null
+    while ((m = re.exec(text))) {
+      const name = m[1]
+      const acc = accounts.find((a) => a.name === name && a.id !== activeId)
+      if (acc && acc.id !== skipAccountId && !seen.has(acc.id)) {
+        seen.add(acc.id)
+        social.pushNotification(acc.id, {
+          type: 'mention',
+          fromName: account.name,
+          fromId: activeId ?? undefined,
+          text: `在评论中 @ 了你：${clip(text)}`,
+          videoId: video.id,
+          videoTitle: video.title,
+        })
+      }
+    }
+  }
+
+  // 评论文本富渲染：@昵称 可点击打开对应账号主页
+  const renderText = (text: string): ReactNode => {
+    const parts = text.split(/@([^ @，。！？、；：]+)/g)
+    return parts.map((p, i) => {
+      if (p.startsWith('@')) {
+        const name = p.slice(1)
+        const acc = accounts.find((a) => a.name === name && a.id !== activeId)
+        if (acc && onOpenAccount) {
+          return (
+            <button
+              key={i}
+              onClick={() => onOpenAccount(acc.id)}
+              className="font-semibold text-red-500 transition hover:underline"
+            >
+              {p}
+            </button>
+          )
+        }
+      }
+      return <span key={i}>{p}</span>
+    })
   }
 
   return (
@@ -534,6 +585,9 @@ export default function VideoDetailPage({
                           videoTitle: video.title,
                         })
                       }
+                      // @提及：跳过被回复者本人，避免与「回复」通知重复
+                      const rtAccId = comments.find((c) => c.id === replyTarget.id)?.authorId
+                      pushMentions(commentText, rtAccId)
                     } else {
                       addComment(video.id, commentText, account.name, {
                         authorId: activeId ?? undefined,
@@ -549,6 +603,7 @@ export default function VideoDetailPage({
                           videoTitle: video.title,
                         })
                       }
+                      pushMentions(commentText)
                     }
                     setCommentText('')
                     setReplyTarget(null)
@@ -578,6 +633,7 @@ export default function VideoDetailPage({
                   onDelete={(cid) => deleteComment(video.id, cid)}
                   onLike={onLikeComment}
                   onOpenAccount={onOpenAccount}
+                  renderText={renderText}
                 />
               ))}
             </div>
@@ -714,6 +770,7 @@ function CommentThread({
   onDelete,
   onLike,
   onOpenAccount,
+  renderText,
 }: {
   node: CNode
   depth: number
@@ -722,6 +779,7 @@ function CommentThread({
   onDelete: (id: string) => void
   onLike: (id: string) => void
   onOpenAccount?: (id: string) => void
+  renderText: (text: string) => ReactNode
 }) {
   return (
     <div className={depth > 0 ? 'ml-6 border-l border-border pl-4' : ''}>
@@ -738,7 +796,7 @@ function CommentThread({
             <div className="text-xs text-muted-foreground">↩ 回复 @{node.replyTo.user}</div>
           )}
           <div className="text-sm text-muted-foreground">
-            {node.deleted ? '该评论已删除' : node.text}
+            {node.deleted ? '该评论已删除' : renderText(node.text)}
           </div>
         </div>
         {!node.deleted && (
@@ -783,6 +841,7 @@ function CommentThread({
               onDelete={onDelete}
               onLike={onLike}
               onOpenAccount={onOpenAccount}
+              renderText={renderText}
             />
           ))}
         </div>
