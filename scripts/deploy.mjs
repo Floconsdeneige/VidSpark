@@ -8,7 +8,6 @@
 
 import { execSync } from 'node:child_process'
 import { mkdtempSync, rmSync, cpSync, existsSync, readdirSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const REPO = process.env.GITHUB_REPO || 'Floconsdeneige/VidSpark'
@@ -29,7 +28,8 @@ if (!existsSync(DIST)) {
   execSync('npm run build', { stdio: 'inherit' })
 }
 
-const tmp = mkdtempSync(join(tmpdir(), 'vs-deploy-'))
+// 在项目内 staging 目录打包（避免 Windows %TEMP% 的 cpSync EIO 权限问题）
+const tmp = mkdtempSync(join(ROOT, '.deploy-'))
 try {
   // 复制 dist 内容到临时目录根（GitHub Pages 以分支根发布）
   for (const f of readdirSync(DIST, { withFileTypes: true })) {
