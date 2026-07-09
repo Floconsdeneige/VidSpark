@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import BubbleMenu from '@/components/BubbleMenu'
 import HomePage from '@/pages/HomePage'
 import PopularPage from '@/pages/PopularPage'
@@ -61,14 +61,38 @@ function Shell() {
   const go = (v: View, query = '') => {
     if (query) setSearchQuery(query)
     setView(v)
+    // 离开详情时清理分享用的 hash，避免地址栏残留失效链接
+    if (v !== 'detail' && location.hash) {
+      window.history.replaceState(null, '', location.pathname + location.search)
+    }
     window.scrollTo({ top: 0 })
   }
 
   const play = (v: Video) => {
     setDetailVideo(v)
     setView('detail')
+    // 写入可分享的 hash 链接（replaceState 不产生额外历史记录）
+    window.history.replaceState(null, '', `#/v/${v.id}`)
     window.scrollTo({ top: 0 })
   }
+
+  // 分享链接直达：解析 #/v/<id> 打开对应视频；支持外部粘贴/刷新后直达
+  useEffect(() => {
+    const sync = () => {
+      const m = location.hash.match(/^#\/v\/(\d+)$/)
+      if (!m) return
+      const id = Number(m[1])
+      const v = allVideos.find((x) => x.id === id)
+      if (v) {
+        setDetailVideo(v)
+        setView('detail')
+        window.scrollTo({ top: 0 })
+      }
+    }
+    sync()
+    window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
+  }, [allVideos])
 
   const navItems = tabs
     .filter((t) => t.key !== 'detail')

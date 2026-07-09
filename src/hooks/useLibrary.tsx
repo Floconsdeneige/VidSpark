@@ -23,7 +23,11 @@ export type LibraryCtx = {
   removeUpload: (v: Video) => void
   /** 某视频的评论（持久化评论 + 预设评论，新评论在前） */
   getComments: (id: number) => Comment[]
+  /** 仅用户持久化评论（可删除），新评论在前 */
+  getUserComments: (id: number) => Comment[]
   addComment: (id: number, text: string, author?: string) => void
+  /** 删除某视频的第 index 条用户评论（index 对应用户评论数组下标） */
+  deleteComment: (id: number, index: number) => void
   /** 播放量 = 基础量 + 增量 */
   viewCount: (v: Video) => number
   /** 打开视频时调用：播放量 +1 并写入观看历史 */
@@ -72,7 +76,20 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     setComments((prev) => ({ ...prev, [id]: [item, ...(prev[id] ?? [])] }))
   }
 
+  const deleteComment = (id: number, index: number) => {
+    setComments((prev) => {
+      const arr = prev[id] ?? []
+      if (index < 0 || index >= arr.length) return prev
+      const next = arr.filter((_, i) => i !== index)
+      const copy = { ...prev }
+      if (next.length === 0) delete copy[id]
+      else copy[id] = next
+      return copy
+    })
+  }
+
   const getComments = (id: number): Comment[] => [...(comments[id] ?? []), ...PRESET_COMMENTS]
+  const getUserComments = (id: number): Comment[] => comments[id] ?? []
 
   const viewCount = (v: Video) => v.viewsNum + (engagement.views[v.id] ?? 0)
 
@@ -87,7 +104,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     addUpload,
     removeUpload,
     getComments,
+    getUserComments,
     addComment,
+    deleteComment,
     viewCount,
     incrementView,
     history: engagement.history,

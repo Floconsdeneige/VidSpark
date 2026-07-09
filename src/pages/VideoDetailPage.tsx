@@ -33,11 +33,13 @@ export default function VideoDetailPage({
     toggleFav,
     isFollowed,
     toggleFollow,
+    isWatchLater,
+    toggleWatchLater,
     likes,
     coins,
     favs,
   } = useInteractions()
-  const { getComments, addComment, viewCount, incrementView, removeUpload } = useLibrary()
+  const { getComments, getUserComments, addComment, deleteComment, viewCount, incrementView, removeUpload } = useLibrary()
   const { account } = useAccount()
 
   const [playing, setPlaying] = useState(false)
@@ -52,13 +54,17 @@ export default function VideoDetailPage({
   const baseFav = Math.max(1, Math.round(video.viewsNum / 300))
   const followed = isFollowed(video.author)
   const comments = getComments(video.id)
+  const myCommentsCount = getUserComments(video.id).length
 
   const showToast = (msg: string) => {
     setToast(msg)
     window.setTimeout(() => setToast(null), 1500)
   }
 
-  const related = allVideos.filter((v) => v.id !== video.id).slice(0, 6)
+  // 相关推荐：同分区优先，不足再用其他分区补齐（前 6 个）
+  const sameCat = allVideos.filter((v) => v.id !== video.id && v.category === video.category)
+  const otherCat = allVideos.filter((v) => v.id !== video.id && v.category !== video.category)
+  const related = [...sameCat, ...otherCat].slice(0, 6)
 
   // 打开即计入播放量 + 写入观看历史（localStorage 持久化）
   useEffect(() => {
@@ -290,8 +296,19 @@ export default function VideoDetailPage({
                 showToast('分享链接已复制 🔗')
               }}
               className="flex items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:bg-background"
+              >
+                🔗 分享
+              </button>
+            <button
+              onClick={() => {
+                toggleWatchLater(video.id)
+                showToast(isWatchLater(video.id) ? '已移出稍后再看' : '已加入稍后再看 🕒')
+              }}
+              className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition ${
+                isWatchLater(video.id) ? 'bg-indigo-600 text-white' : 'bg-card text-foreground hover:bg-background'
+              }`}
             >
-              🔗 分享
+              🕒 稍后再看
             </button>
           </div>
 
@@ -318,13 +335,22 @@ export default function VideoDetailPage({
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white">
                     {c.avatar}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="text-sm">
                       <span className="font-semibold">@{c.user}</span>{' '}
                       <span className="text-xs text-muted-foreground">· {c.time}</span>
                     </div>
                     <div className="text-sm text-muted-foreground">{c.text}</div>
                   </div>
+                  {i < myCommentsCount && (
+                    <button
+                      onClick={() => deleteComment(video.id, i)}
+                      className="shrink-0 self-center rounded-full px-2 py-1 text-xs text-muted-foreground transition hover:text-red-500"
+                      title="删除我的评论"
+                    >
+                      删除
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

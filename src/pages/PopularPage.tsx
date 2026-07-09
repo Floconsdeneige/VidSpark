@@ -1,5 +1,7 @@
 import VideoCard from '@/components/VideoCard'
 import type { Video } from '@/data/mock'
+import { formatViews } from '@/data/mock'
+import { useLibrary } from '@/hooks/useLibrary'
 
 const podiumColors = ['#f43f5e', '#fb923c', '#fbbf24']
 
@@ -10,7 +12,9 @@ export default function PopularPage({
   allVideos: Video[]
   onPlay: (v: Video) => void
 }) {
-  const ranked = [...allVideos].sort((a, b) => b.viewsNum - a.viewsNum)
+  const { viewCount } = useLibrary()
+  // 按实时播放量（含观看增量）排序，而非静态字段
+  const ranked = [...allVideos].sort((a, b) => viewCount(b) - viewCount(a))
   const top3 = ranked.slice(0, 3)
   const rest = ranked.slice(3)
 
@@ -18,7 +22,7 @@ export default function PopularPage({
     <main className="px-6 pb-20 pt-8">
       <h1 className="mb-1 text-2xl font-bold">🔥 全站热榜</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        实时热度排序 · 每小时更新 · 共 {ranked.length} 个视频
+        按实时播放量排序 · 共 {ranked.length} 个视频
       </p>
 
       {/* 前三名领奖台 */}
@@ -45,7 +49,7 @@ export default function PopularPage({
               {v.title}
             </button>
             <div className="mt-1 text-sm text-muted-foreground">@{v.author}</div>
-            <div className="mt-2 text-sm font-medium text-red-500">🔥 {v.views}次热播</div>
+            <div className="mt-2 text-sm font-medium text-red-500">🔥 {formatViews(viewCount(v))}次热播</div>
           </div>
         ))}
       </div>

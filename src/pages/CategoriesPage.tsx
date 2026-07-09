@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import VideoCard from '@/components/VideoCard'
 import { categories, matchVideo, type Video, type CategoryKey } from '@/data/mock'
 import { useInteractions } from '@/hooks/useInteractions'
+import { useLibrary } from '@/hooks/useLibrary'
 
 const catName = (k: CategoryKey) => categories.find((c) => c.key === k)?.name ?? ''
 
@@ -30,7 +31,9 @@ export default function CategoriesPage({
   const [query, setQuery] = useState(initialQuery)
   const [history, setHistory] = useState<string[]>(loadHistory)
   const [onlyFollowed, setOnlyFollowed] = useState(false)
+  const [sort, setSort] = useState<'smart' | 'hot' | 'new'>('smart')
   const { followed } = useInteractions()
+  const { viewCount } = useLibrary()
 
   const addHistory = (raw: string) => {
     const w = raw.trim()
@@ -62,6 +65,13 @@ export default function CategoriesPage({
   if (onlyFollowed) {
     const set = new Set(followed)
     filtered = filtered.filter((v) => set.has(v.author))
+  }
+
+  // 排序：综合（默认顺序）/ 最热（实时播放量降序）/ 最新（创建时间降序）
+  if (sort === 'hot') {
+    filtered = [...filtered].sort((a, b) => viewCount(b) - viewCount(a))
+  } else if (sort === 'new') {
+    filtered = [...filtered].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
   }
 
   const activeCat = categories.find((c) => c.key === active)
@@ -185,6 +195,26 @@ export default function CategoriesPage({
           👥 只看关注的人
           {onlyFollowed && <span className="text-xs">✓</span>}
         </button>
+
+        <div className="ml-auto flex items-center gap-1 rounded-full border border-border bg-card p-1 text-sm">
+          {(
+            [
+              { key: 'smart', label: '综合' },
+              { key: 'hot', label: '最热' },
+              { key: 'new', label: '最新' },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => setSort(opt.key)}
+              className={`rounded-full px-3 py-1 text-sm transition ${
+                sort === opt.key ? 'bg-red-600 text-white' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {filtered.length === 0 ? (

@@ -19,6 +19,8 @@ export type Video = {
   blobKey?: string
   /** 真实视频时长（秒），用于真实播放进度 */
   realDurationSec?: number
+  /** 创建时间戳（毫秒），用于「最新」排序；默认视频为 0（最旧） */
+  createdAt?: number
 }
 
 /** 评论条目 */

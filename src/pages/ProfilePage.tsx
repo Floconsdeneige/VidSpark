@@ -5,13 +5,14 @@ import { useInteractions } from '@/hooks/useInteractions'
 import { useLibrary } from '@/hooks/useLibrary'
 import { useAccount } from '@/hooks/useAccount'
 
-type Tab = 'uploads' | 'faved' | 'liked' | 'history' | 'following'
+type Tab = 'uploads' | 'faved' | 'liked' | 'history' | 'watchlater' | 'following'
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'uploads', label: '我的投稿', icon: '📤' },
   { key: 'faved', label: '收藏', icon: '⭐' },
   { key: 'liked', label: '点赞', icon: '👍' },
   { key: 'history', label: '观看历史', icon: '🕘' },
+  { key: 'watchlater', label: '稍后再看', icon: '🕒' },
   { key: 'following', label: '关注', icon: '➕' },
 ]
 
@@ -29,7 +30,7 @@ export default function ProfilePage({
   onBack: () => void
 }) {
   const { userVideos, removeUpload, history } = useLibrary()
-  const { isFaved, isLiked, followed, toggleFollow } = useInteractions()
+  const { isFaved, isLiked, isWatchLater, followed, toggleFollow } = useInteractions()
   const { account, setName, setAvatar } = useAccount()
   const [tab, setTab] = useState<Tab>('uploads')
   const [editing, setEditing] = useState(false)
@@ -47,6 +48,7 @@ export default function ProfilePage({
     faved: allVideos.filter((v) => isFaved(v.id)),
     liked: allVideos.filter((v) => isLiked(v.id)),
     history: history.map(byId).filter((v): v is Video => !!v),
+    watchlater: allVideos.filter((v) => isWatchLater(v.id)),
     following: [],
   }
 
@@ -205,6 +207,8 @@ export default function ProfilePage({
             </>
           ) : tab === 'history' ? (
             '还没有观看记录，去首页逛逛吧～'
+          ) : tab === 'watchlater' ? (
+            '还没有「稍后再看」的视频，去详情页点 🕒 收藏起来吧～'
           ) : (
             '这里还空空如也，去给视频点个赞 / 收个藏吧～'
           )}

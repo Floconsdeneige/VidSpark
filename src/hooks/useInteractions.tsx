@@ -11,10 +11,11 @@ export type Interactions = {
   coined: number[]
   faved: number[]
   followed: string[]
+  watchLater: number[]
 }
 
 const KEY = 'vidspark_interactions_v1'
-const empty: Interactions = { liked: [], coined: [], faved: [], followed: [] }
+const empty: Interactions = { liked: [], coined: [], faved: [], followed: [], watchLater: [] }
 
 function load(): Interactions {
   try {
@@ -26,6 +27,7 @@ function load(): Interactions {
       coined: p.coined ?? [],
       faved: p.faved ?? [],
       followed: p.followed ?? [],
+      watchLater: p.watchLater ?? [],
     }
   } catch {
     return empty
@@ -41,10 +43,13 @@ export type InteractionsCtx = {
   toggleFav: (id: number) => void
   isFollowed: (author: string) => boolean
   toggleFollow: (author: string) => void
+  isWatchLater: (id: number) => boolean
+  toggleWatchLater: (id: number) => void
   liked: number[]
   coined: number[]
   faved: number[]
   followed: string[]
+  watchLater: number[]
   likes: (base: number, id: number) => number
   coins: (base: number, id: number) => number
   favs: (base: number, id: number) => number
@@ -81,10 +86,13 @@ export function InteractionsProvider({ children }: { children: ReactNode }) {
     toggleFav: (id) => toggle('faved', id),
     isFollowed: (a) => state.followed.includes(a),
     toggleFollow: (a) => toggle('followed', a),
+    isWatchLater: (id) => state.watchLater.includes(id),
+    toggleWatchLater: (id) => toggle('watchLater', id),
     liked: state.liked,
     coined: state.coined,
     faved: state.faved,
     followed: state.followed,
+    watchLater: state.watchLater,
     likes: (base, id) => base + (state.liked.includes(id) ? 1 : 0),
     coins: (base, id) => base + (state.coined.includes(id) ? 1 : 0),
     favs: (base, id) => base + (state.faved.includes(id) ? 1 : 0),
