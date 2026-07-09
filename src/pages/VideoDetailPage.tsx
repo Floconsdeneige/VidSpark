@@ -1,18 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Video } from '@/data/mock'
-import { categories } from '@/data/mock'
+import { categories, formatViews } from '@/data/mock'
 import { useInteractions } from '@/hooks/useInteractions'
+import { useLibrary } from '@/hooks/useLibrary'
+import { getBlob } from '@/lib/db'
 
 const DANMAKU = [
   '前排！', '这运镜绝了', '慧眼盯得我发毛', '已三连', 'BGM 是什么',
   '哈哈哈哈哈', '收藏了', 'UP主好强', '下饭神作', '泪目了',
   '慕了慕了', '求教程', '循环ing', '太顶了', '沙发',
-]
-
-const PRESET_COMMENTS = [
-  { user: '路人甲', avatar: '路', text: '看完直接关注了，质量真高', time: '2小时前' },
-  { user: '弹幕护卫', avatar: '弹', text: '这弹幕密度，妥妥的爆款相', time: '5小时前' },
-  { user: '夜猫子', avatar: '夜', text: '半夜刷到，救命好上头', time: '昨天' },
 ]
 
 export default function VideoDetailPage({
@@ -40,17 +36,20 @@ export default function VideoDetailPage({
     coins,
     favs,
   } = useInteractions()
+  const { getComments, addComment, viewCount, incrementView, removeUpload } = useLibrary()
 
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
   const [toast, setToast] = useState<string | null>(null)
-  const [comments, setComments] = useState(PRESET_COMMENTS)
   const [commentText, setCommentText] = useState('')
+  const [objectUrl, setObjectUrl] = useState<string | null>(null)
+  const videoElRef = useRef<HTMLVideoElement>(null)
 
   const baseLike = Math.max(1, Math.round(video.viewsNum / 220))
   const baseCoin = Math.max(1, Math.round(video.viewsNum / 380))
   const baseFav = Math.max(1, Math.round(video.viewsNum / 300))
   const followed = isFollowed(video.author)
+  const comments = getComments(video.id)
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -59,10 +58,36 @@ export default function VideoDetailPage({
 
   const related = allVideos.filter((v) => v.id !== video.id).slice(0, 6)
 
-  // 进度条：仅在播放时推进，暂停/卸载即停止
+  // 打开即计入播放量 + 写入观看历史（localStorage 持久化）
+  useEffect(() => {
+    incrementView(video.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video.id])
+
+  // 本地上传视频：从 IndexedDB 取真实文件并生成可播放 URL
+  useEffect(() => {
+    let url: string | null = null
+    let cancelled = false
+    if (video.isLocal && video.blobKey) {
+      getBlob(video.blobKey)
+        .then((b) => {
+          if (b && !cancelled) {
+            url = URL.createObjectURL(b)
+            setObjectUrl(url)
+          }
+        })
+        .catch(() => {})
+    }
+    return () => {
+      cancelled = true
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [video.id])
+
+  // 模拟播放器进度推进
   const timerRef = useRef<number | null>(null)
   useEffect(() => {
-    if (!playing) return
+    if (!playing || objectUrl) return // 真实视频由 <video> 自身控制
     timerRef.current = window.setInterval(() => {
       setProgress((pr) => {
         if (pr >= 100) {
@@ -75,7 +100,7 @@ export default function VideoDetailPage({
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current)
     }
-  }, [playing])
+  }, [playing, objectUrl])
 
   // 键盘快捷键：空格播放/暂停、Esc 返回（输入框聚焦时不拦截）
   useEffect(() => {
@@ -85,14 +110,25 @@ export default function VideoDetailPage({
       if (typing) return
       if (e.code === 'Space') {
         e.preventDefault()
-        setPlaying((p) => !p)
+        if (objectUrl && videoElRef.current) {
+          videoElRef.current.paused ? videoElRef.current.play() : videoElRef.current.pause()
+        } else {
+          setPlaying((p) => !p)
+        }
       } else if (e.key === 'Escape') {
         onBack()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack])
+  }, [onBack, objectUrl])
+
+  const onDelete = () => {
+    if (!window.confirm(`确定删除《${video.title}》吗？该操作不可恢复。`)) return
+    removeUpload(video)
+    showToast('已删除投稿')
+    onBack()
+  }
 
   return (
     <main className="px-6 pb-24 pt-6 md:pb-20">
@@ -106,20 +142,36 @@ export default function VideoDetailPage({
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
         {/* 主区：播放器 + 信息 + 评论 */}
         <div>
-          {/* 模拟播放器 */}
+          {/* 播放器 */}
           <div
             className="relative aspect-video w-full overflow-hidden rounded-2xl"
             style={{ background: video.cover }}
           >
-            <div className="absolute inset-0 flex items-center justify-center">
-              <button
-                onClick={() => setPlaying((p) => !p)}
-                className="flex h-20 w-20 items-center justify-center rounded-full bg-black/50 text-4xl text-white backdrop-blur transition hover:scale-105"
-                aria-label={playing ? '暂停' : '播放'}
-              >
-                {playing ? '⏸' : '▶'}
-              </button>
-            </div>
+            {objectUrl ? (
+              <video
+                ref={videoElRef}
+                className="absolute inset-0 h-full w-full"
+                src={objectUrl}
+                poster={video.cover}
+                controls
+                onPlay={() => setPlaying(true)}
+                onPause={() => setPlaying(false)}
+                onTimeUpdate={(e) => {
+                  const el = e.currentTarget
+                  if (el.duration) setProgress((el.currentTime / el.duration) * 100)
+                }}
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <button
+                  onClick={() => setPlaying((p) => !p)}
+                  className="flex h-20 w-20 items-center justify-center rounded-full bg-black/50 text-4xl text-white backdrop-blur transition hover:scale-105"
+                  aria-label={playing ? '暂停' : '播放'}
+                >
+                  {playing ? '⏸' : '▶'}
+                </button>
+              </div>
+            )}
 
             {/* 弹幕层 */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -148,7 +200,11 @@ export default function VideoDetailPage({
               />
             </div>
             <span className="absolute bottom-2 right-3 rounded bg-black/60 px-1.5 py-0.5 text-xs text-white">
-              {video.duration}
+              {objectUrl
+                ? videoElRef.current?.duration
+                  ? `${Math.floor(videoElRef.current.duration / 60)}:${String(Math.floor(videoElRef.current.duration % 60)).padStart(2, '0')}`
+                  : video.duration
+                : video.duration}
             </span>
 
             <style>{`@keyframes dm-move { from { transform: translateX(0); } to { transform: translateX(-120vw); } }`}</style>
@@ -174,12 +230,20 @@ export default function VideoDetailPage({
             >
               {followed ? '已关注' : '+ 关注'}
             </button>
-            <span>· {video.views}次观看</span>
+            <span>· {formatViews(viewCount(video))}次观看</span>
             <span>· {video.publishedAt}</span>
             {cat && (
               <span className="rounded-full bg-background px-2 py-0.5">
                 {cat.icon} {cat.name}
               </span>
+            )}
+            {video.isLocal && (
+              <button
+                onClick={onDelete}
+                className="rounded-full bg-card px-3 py-0.5 text-xs font-medium text-muted-foreground transition hover:text-red-500"
+              >
+                🗑 删除投稿
+              </button>
             )}
           </div>
 
@@ -220,7 +284,7 @@ export default function VideoDetailPage({
             </button>
             <button
               onClick={() => {
-                navigator.clipboard?.writeText(`https://vidspark.example/v/${video.id}`)
+                navigator.clipboard?.writeText(`${location.origin}${location.pathname}#/v/${video.id}`)
                 showToast('分享链接已复制 🔗')
               }}
               className="flex items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:bg-background"
@@ -238,10 +302,7 @@ export default function VideoDetailPage({
                 onChange={(e) => setCommentText(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && commentText.trim()) {
-                    setComments((c) => [
-                      { user: '我', avatar: '我', text: commentText.trim(), time: '刚刚' },
-                      ...c,
-                    ])
+                    addComment(video.id, commentText)
                     setCommentText('')
                   }
                 }}
@@ -285,7 +346,7 @@ export default function VideoDetailPage({
                 <div className="min-w-0">
                   <div className="line-clamp-2 text-sm font-medium">{v.title}</div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    @{v.author} · {v.views}
+                    @{v.author} · {formatViews(viewCount(v))}
                   </div>
                 </div>
               </div>

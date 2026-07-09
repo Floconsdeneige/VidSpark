@@ -1,26 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import BubbleMenu from '@/components/BubbleMenu'
 import HomePage from '@/pages/HomePage'
 import PopularPage from '@/pages/PopularPage'
 import CategoriesPage from '@/pages/CategoriesPage'
 import UploadPage from '@/pages/UploadPage'
 import FeedPage from '@/pages/FeedPage'
+import ProfilePage from '@/pages/ProfilePage'
 import VideoDetailPage from '@/pages/VideoDetailPage'
 import { InteractionsProvider } from '@/hooks/useInteractions'
+import { LibraryProvider, useLibrary } from '@/hooks/useLibrary'
 import { videos as baseVideos, type Video } from '@/data/mock'
 
-type View = 'home' | 'popular' | 'categories' | 'upload' | 'feed' | 'detail'
-
-const STORAGE_KEY = 'vidspark_uploads_v1'
-
-function loadUploads(): Video[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as Video[]) : []
-  } catch {
-    return []
-  }
-}
+type View = 'home' | 'popular' | 'categories' | 'upload' | 'feed' | 'profile' | 'detail'
 
 const tabs: { key: View; label: string }[] = [
   { key: 'home', label: '首页' },
@@ -28,6 +19,7 @@ const tabs: { key: View; label: string }[] = [
   { key: 'categories', label: '分区' },
   { key: 'upload', label: '上传' },
   { key: 'feed', label: '动态' },
+  { key: 'profile', label: '我的' },
 ]
 
 const navColor: Record<View, string> = {
@@ -36,23 +28,25 @@ const navColor: Record<View, string> = {
   categories: '#8b5cf6',
   upload: '#10b981',
   feed: '#3b82f6',
+  profile: '#ec4899',
   detail: '#ff4d4d',
 }
 
-export default function App() {
+const navIcon: Record<string, string> = {
+  home: '🏠',
+  popular: '🔥',
+  categories: '📂',
+  upload: '📤',
+  feed: '📡',
+  profile: '👤',
+  detail: '▶️',
+}
+
+function Shell() {
+  const { userVideos, addUpload } = useLibrary()
   const [view, setView] = useState<View>('home')
-  const [userVideos, setUserVideos] = useState<Video[]>(loadUploads)
   const [searchQuery, setSearchQuery] = useState('')
   const [detailVideo, setDetailVideo] = useState<Video | null>(null)
-
-  // 上传视频持久化：刷新不丢
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(userVideos))
-    } catch {
-      /* 忽略存储异常 */
-    }
-  }, [userVideos])
 
   // 全站视频 = 用户上传(置顶) + 默认库
   const allVideos: Video[] = [...userVideos, ...baseVideos]
@@ -81,7 +75,6 @@ export default function App() {
     }))
 
   return (
-    <InteractionsProvider>
     <div className="min-h-screen bg-background text-foreground">
       {/* 顶部导航 */}
       <header className="sticky top-0 z-10 flex items-center gap-4 border-b border-border bg-background/80 px-6 py-3 backdrop-blur">
@@ -121,7 +114,7 @@ export default function App() {
           <input
             name="q"
             defaultValue={searchQuery}
-            placeholder="搜视频 / UP主 / 分区 / 标签…"
+            placeholder="搜视频 / UP主 / 分区 / 标签 / 简介…"
             className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           <span className="text-muted-foreground">🔍</span>
@@ -144,12 +137,13 @@ export default function App() {
       )}
       {view === 'upload' && (
         <UploadPage
-          onPublish={(v) => setUserVideos((prev) => [v, ...prev])}
+          onPublish={addUpload}
           onGoHome={() => go('home')}
           onPlay={play}
         />
       )}
       {view === 'feed' && <FeedPage userUploads={userVideos} onPlay={play} />}
+      {view === 'profile' && <ProfilePage allVideos={allVideos} onPlay={play} onGoHome={() => go('home')} onBack={() => go('home')} />}
       {view === 'detail' && detailVideo && (
         // key 绑定视频 id：从相关推荐点另一视频时，重建页面以重置播放/评论状态
         <VideoDetailPage key={detailVideo.id} video={detailVideo} allVideos={allVideos} onBack={() => go('home')} onPlay={play} />
@@ -186,15 +180,15 @@ export default function App() {
           ))}
       </nav>
     </div>
-    </InteractionsProvider>
   )
 }
 
-const navIcon: Record<string, string> = {
-  home: '🏠',
-  popular: '🔥',
-  categories: '📂',
-  upload: '📤',
-  feed: '📡',
-  detail: '▶️',
+export default function App() {
+  return (
+    <InteractionsProvider>
+      <LibraryProvider>
+        <Shell />
+      </LibraryProvider>
+    </InteractionsProvider>
+  )
 }

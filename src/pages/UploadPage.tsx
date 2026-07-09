@@ -1,7 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { categories, type CategoryKey, type Video } from '@/data/mock'
-
-let nextId = 1000
+import { uid, putBlob } from '@/lib/db'
 
 const coverOptions = [
   'linear-gradient(135deg,#667eea,#764ba2)',
@@ -43,10 +42,15 @@ export default function UploadPage({
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
+  // 保留选中的视频文件，发布时存入 IndexedDB 以便真实播放
+  const videoFileRef = useRef<File | null>(null)
+  const timerRef = useRef<number | null>(null)
+  const finalizedRef = useRef(false)
 
   const titleError = !title.trim()
 
   const pickVideo = (file: File) => {
+    videoFileRef.current = file
     setFileName(file.name)
     // 用隐藏 video 读取真实时长
     const url = URL.createObjectURL(file)
@@ -73,39 +77,69 @@ export default function UploadPage({
 
   const handlePublish = () => {
     setTouched(true)
-    if (titleError || progress !== null) return
+    if (titleError) return
     setProgress(0)
-    const timer = setInterval(() => {
+    finalizedRef.current = false
+    if (timerRef.current) clearInterval(timerRef.current)
+    timerRef.current = window.setInterval(() => {
       setProgress((p) => {
         const next = (p ?? 0) + Math.floor(Math.random() * 18) + 8
-        if (next >= 100) {
-          clearInterval(timer)
-          const tags = tagsRaw
-            .split(/[,，\s]+/)
-            .map((t) => t.trim())
-            .filter(Boolean)
-          const v: Video = {
-            id: nextId++,
-            title: title.trim(),
-            author: '我',
-            views: '0',
-            viewsNum: 0,
-            duration,
-            cover,
-            category,
-            publishedAt: '刚刚',
-            tags: tags.length ? tags : ['新人投稿'],
-            desc: desc.trim() || 'UP主暂未填写简介',
-          }
-          onPublish(v)
-          setPublished(v)
-          setProgress(null)
-          return 100
-        }
-        return next
+        return next >= 100 ? 100 : next
       })
     }, 180)
   }
+
+  // 进度满 100 时落库（唯一 id + 真实视频文件存入 IndexedDB），再发布
+  useEffect(() => {
+    if (progress !== 100 || finalizedRef.current) return
+    finalizedRef.current = true
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    void (async () => {
+      const id = uid()
+      let blobKey: string | undefined
+      if (videoFileRef.current) {
+        blobKey = `vid-${id}`
+        try {
+          await putBlob(blobKey, videoFileRef.current)
+        } catch {
+          blobKey = undefined
+        }
+      }
+      const tags = tagsRaw
+        .split(/[,，\s]+/)
+        .map((t) => t.trim())
+        .filter(Boolean)
+      const v: Video = {
+        id,
+        title: title.trim(),
+        author: '我',
+        views: '0',
+        viewsNum: 0,
+        duration,
+        cover,
+        category,
+        publishedAt: '刚刚',
+        tags: tags.length ? tags : ['新人投稿'],
+        desc: desc.trim() || 'UP主暂未填写简介',
+        isLocal: !!blobKey,
+        blobKey,
+      }
+      onPublish(v)
+      setPublished(v)
+      setProgress(null)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress])
+
+  // 卸载时清理计时器
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [])
 
   if (published) {
     return (

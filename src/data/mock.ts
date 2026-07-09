@@ -13,6 +13,20 @@ export type Video = {
   publishedAt: string
   tags?: string[]
   desc?: string
+  /** 是否本机用户上传（可删除、可真实播放） */
+  isLocal?: boolean
+  /** IndexedDB 中视频 Blob 的键，形如 `vid-<id>` */
+  blobKey?: string
+  /** 真实视频时长（秒），用于真实播放进度 */
+  realDurationSec?: number
+}
+
+/** 评论条目 */
+export type Comment = {
+  user: string
+  avatar: string
+  text: string
+  time: string
 }
 
 export type Category = {
@@ -48,7 +62,7 @@ export const videos: Video[] = [
   { id: 12, title: '复古街机厅巡礼', author: '像素考古学家', views: '39万', viewsNum: 390000, duration: '11:48', cover: 'linear-gradient(135deg,#8e2de2,#4a00e0)', category: 'game', publishedAt: '6天前', tags: ['街机', '怀旧', '游戏'], desc: '藏在老商场地下室的街机厅，手柄都包浆了。' },
 ]
 
-/** 搜索匹配：标题 / UP主 / 分区名 / 标签 */
+/** 搜索匹配：标题 / UP主 / 分区名 / 标签 / 简介 */
 export function matchVideo(v: Video, q: string, catName: (k: CategoryKey) => string): boolean {
   const s = q.trim().toLowerCase()
   if (!s) return true
@@ -56,9 +70,25 @@ export function matchVideo(v: Video, q: string, catName: (k: CategoryKey) => str
     v.title.toLowerCase().includes(s) ||
     v.author.toLowerCase().includes(s) ||
     catName(v.category).toLowerCase().includes(s) ||
-    (v.tags ?? []).some((t) => t.toLowerCase().includes(s))
+    (v.tags ?? []).some((t) => t.toLowerCase().includes(s)) ||
+    (v.desc ?? '').toLowerCase().includes(s)
   )
 }
+
+/** 把数字观看量格式化为「万 / 亿」中文单位 */
+export function formatViews(n: number): string {
+  if (n >= 100000000) return `${(n / 100000000).toFixed(1)}亿`
+  if (n >= 10000) return `${(n / 10000).toFixed(1)}万`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+  return String(n)
+}
+
+/** 默认视频的预设评论（与用户持久化评论合并展示） */
+export const PRESET_COMMENTS: Comment[] = [
+  { user: '路人甲', avatar: '路', text: '看完直接关注了，质量真高', time: '2小时前' },
+  { user: '弹幕护卫', avatar: '弹', text: '这弹幕密度，妥妥的爆款相', time: '5小时前' },
+  { user: '夜猫子', avatar: '夜', text: '半夜刷到，救命好上头', time: '昨天' },
+]
 
 export type FeedItem = {
   id: number
