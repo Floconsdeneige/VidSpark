@@ -23,9 +23,69 @@ export function useSocial() {
 
   const isFollowed = (name: string) => inter.isFollowed(name)
 
+  // —— 收藏夹（组合 useInteractions.faved 与 useAccount.favFolders，保持两者一致） ——
+  const favFolders = acc.favFolders
+  const isFaved = (id: number) => inter.isFaved(id)
+  /** 收藏到默认收藏夹 */
+  const fav = (id: number) => {
+    if (!inter.isFaved(id)) inter.toggleFav(id)
+    acc.favFolderAdd(id, 'default')
+  }
+  /** 取消收藏（从 faved 与所有收藏夹移除） */
+  const unfav = (id: number) => {
+    if (inter.isFaved(id)) inter.toggleFav(id)
+    acc.favClearAll(id)
+  }
+  /** 在指定收藏夹中切换该视频（同步 faved 集合） */
+  const toggleFolder = (id: number, folderId: string) => {
+    const folder = acc.favFolders.find((f) => f.id === folderId)
+    const inFolder = folder?.videoIds.includes(id) ?? false
+    if (inFolder) {
+      acc.favFolderRemove(id, folderId)
+      const still = acc.favFolders.some((f) => f.id !== folderId && f.videoIds.includes(id))
+      if (!still && inter.isFaved(id)) inter.toggleFav(id)
+    } else {
+      acc.favFolderAdd(id, folderId)
+      if (!inter.isFaved(id)) inter.toggleFav(id)
+    }
+  }
+  const inFolder = (id: number, folderId: string) =>
+    acc.favFolders.find((f) => f.id === folderId)?.videoIds.includes(id) ?? false
+  const createFavFolder = (name: string) => acc.createFavFolder(name)
+
+  // —— 一键三连（B站签名）：确保点赞 + 投币 + 收藏全开，返回是否产生了变化 ——
+  const triple = (id: number) => {
+    let changed = false
+    if (!inter.isLiked(id)) {
+      inter.toggleLike(id)
+      changed = true
+    }
+    if (!inter.isCoined(id)) {
+      inter.toggleCoin(id)
+      changed = true
+    }
+    if (!inter.isFaved(id)) {
+      inter.toggleFav(id)
+      acc.favFolderAdd(id, 'default')
+      changed = true
+    }
+    return changed
+  }
+
   return {
     follow,
     isFollowed,
+    // 收藏夹
+    favFolders,
+    isFaved,
+    fav,
+    unfav,
+    toggleFolder,
+    inFolder,
+    createFavFolder,
+    // 一键三连
+    triple,
+    // 社交关系图
     isFollowingAccount: acc.isFollowingAccount,
     mutualWith: acc.mutualWith,
     followersList: acc.followersList,

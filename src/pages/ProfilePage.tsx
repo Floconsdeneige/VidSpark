@@ -378,6 +378,8 @@ export default function ProfilePage({
             ))}
           </div>
         )
+      ) : tab === 'faved' ? (
+        <FavFoldersView folders={account.favFolders} allVideos={allVideos} onPlay={onPlay} />
       ) : current.length === 0 ? (
         <div className="py-16 text-center text-muted-foreground">
           {tab === 'uploads' ? (
@@ -428,6 +430,48 @@ export default function ProfilePage({
         ← 返回
       </button>
     </main>
+  )
+}
+
+// 收藏夹分组视图（B站式：收藏按命名文件夹归类）
+function FavFoldersView({
+  folders,
+  allVideos,
+  onPlay,
+}: {
+  folders: { id: string; name: string; videoIds: number[] }[]
+  allVideos: Video[]
+  onPlay: (v: Video) => void
+}) {
+  const byId = (id: number) => allVideos.find((v) => v.id === id)
+  const nonEmpty = folders.filter((f) => f.videoIds.length > 0)
+  if (nonEmpty.length === 0) {
+    return (
+      <div className="py-16 text-center text-muted-foreground">
+        还没有收藏任何视频，去详情页点 ⭐ 收藏，还能放进不同收藏夹～
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-6">
+      {folders.map((f) => {
+        const vs = f.videoIds.map(byId).filter((v): v is Video => !!v)
+        if (vs.length === 0) return null
+        return (
+          <div key={f.id}>
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              📁 {f.name}
+              <span className="text-xs font-normal text-muted-foreground">{f.videoIds.length}</span>
+            </div>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {vs.map((v) => (
+                <VideoCard key={v.id} video={v} onClick={() => onPlay(v)} />
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

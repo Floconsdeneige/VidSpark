@@ -1,8 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { Video } from '@/data/mock'
 import { useInteractions } from '@/hooks/useInteractions'
 import { useAccount } from '@/hooks/useAccount'
 import { useSocial } from '@/hooks/useSocial'
+import { readAccountUploads } from '@/hooks/useLibrary'
 
 type FItem = {
   key: string
@@ -41,6 +42,7 @@ export default function FeedPage({
   const { liked, coined, faved, followed } = useInteractions()
   const { account, accounts, activeId } = useAccount()
   const social = useSocial()
+  const [feedTab, setFeedTab] = useState<'follow' | 'friends' | 'recommend'>('follow')
 
   // 推荐关注：尚未关注的真实账号（不含自己）
   const recommended = useMemo(
@@ -114,12 +116,79 @@ export default function FeedPage({
     return out
   }, [allVideos, userUploads, liked, coined, faved, followed, account.name, account.avatar])
 
+  // 朋友：仅互关（双向关注）账号的投稿（抖音「朋友」流）
+  const friendsItems = useMemo<FItem[]>(() => {
+    const out: FItem[] = []
+    social.followingList(activeId ?? '').forEach((a) => {
+      if (!social.mutualWith(a.id)) return
+      readAccountUploads(a.id).forEach((v) => {
+        out.push({
+          key: `fr-${a.id}-${v.id}`,
+          type: 'upload',
+          user: a.name,
+          avatar: a.avatar,
+          text: `发布了新视频《${v.title}》`,
+          targetVideo: v,
+        })
+      })
+    })
+    return out
+  }, [social, activeId])
+
+  // 推荐：未关注账号的投稿，按播放量排序的发现流（抖音「推荐」流）
+  const recommendItems = useMemo<FItem[]>(() => {
+    const followedSet = new Set(followed)
+    const followedIds = new Set(social.followingList(activeId ?? '').map((a) => a.id))
+    const myIds = new Set(userUploads.map((u) => u.id))
+    return allVideos
+      .filter(
+        (v) =>
+          !myIds.has(v.id) &&
+          !followedSet.has(v.author) &&
+          !(v.authorId != null && followedIds.has(v.authorId)),
+      )
+      .sort((a, b) => b.viewsNum - a.viewsNum)
+      .slice(0, 24)
+      .map((v) => ({
+        key: `rec-${v.id}`,
+        type: 'upload' as const,
+        user: v.author,
+        avatar: Array.from(v.author)[0] ?? 'U',
+        text: `发布了新视频《${v.title}》`,
+        targetVideo: v,
+      }))
+  }, [allVideos, userUploads, followed, social, activeId])
+
+  const display = feedTab === 'friends' ? friendsItems : feedTab === 'recommend' ? recommendItems : items
+
   return (
     <main className="px-6 pb-20 pt-8">
       <h1 className="mb-1 text-2xl font-bold">📰 动态</h1>
-      <p className="mb-6 text-sm text-muted-foreground">
+      <p className="mb-4 text-sm text-muted-foreground">
         根据你的关注、投稿与互动实时生成 · @{account.name}
       </p>
+
+      {/* 抖音式三栏分流：关注 / 朋友(互关) / 推荐(发现) */}
+      <div className="mb-6 flex gap-2">
+        {([
+          { k: 'follow', label: '关注' },
+          { k: 'friends', label: '朋友' },
+          { k: 'recommend', label: '推荐' },
+        ] as const).map((t) => (
+          <button
+            key={t.k}
+            onClick={() => setFeedTab(t.k)}
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+              feedTab === t.k ? 'bg-red-600 text-white' : 'bg-card text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {t.label}
+            {t.k === 'friends' && social.followingList(activeId ?? '').filter((a) => social.mutualWith(a.id)).length > 0 && (
+              <span className="ml-1 text-xs">·{social.followingList(activeId ?? '').filter((a) => social.mutualWith(a.id)).length}</span>
+            )}
+          </button>
+        ))}
+      </div>
 
       {/* 推荐关注：发现其他真实账号 */}
       {recommended.length > 0 && (
@@ -156,13 +225,17 @@ export default function FeedPage({
         </div>
       )}
 
-      {items.length === 0 ? (
+      {display.length === 0 ? (
         <div className="py-16 text-center text-muted-foreground">
-          还没有动态。去关注几位 UP 主、发个视频或点个赞，这里就会热闹起来～
+          {feedTab === 'friends'
+            ? '还没有互关的朋友。去视频详情页关注其他账号，对方也关注你后即出现在「朋友」流～'
+            : feedTab === 'recommend'
+              ? '暂时没有可推荐的视频，去关注几位 UP 主或发个视频吧～'
+              : '还没有动态。去关注几位 UP 主、发个视频或点个赞，这里就会热闹起来～'}
         </div>
       ) : (
         <div className="mx-auto max-w-2xl space-y-3">
-          {items.map((item) => {
+          {display.map((item) => {
             const meta = META[item.type]
             return (
               <div

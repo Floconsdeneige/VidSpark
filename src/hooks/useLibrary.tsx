@@ -67,6 +67,8 @@ export type LibraryCtx = {
   ) => string
   /** 按稳定 id 删除某条用户评论；若该评论已被回复则软删除（保留回复上下文） */
   deleteComment: (id: number, commentId: string) => void
+  /** 评论点赞/取消点赞（切换 likedByMe 并增减 likes 计数） */
+  likeComment: (id: number, commentId: string) => void
   /** 播放量 = 基础量 + 增量 */
   viewCount: (v: Video) => number
   /** 打开视频时调用：播放量 +1 并写入观看历史 */
@@ -173,6 +175,20 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const getComments = (id: number): Comment[] => [...(comments[id] ?? []), ...PRESET_COMMENTS]
   const getUserComments = (id: number): Comment[] => comments[id] ?? []
 
+  const likeComment = (id: number, commentId: string) => {
+    setComments((prev) => {
+      const arr = prev[id] ?? []
+      const next = arr.map((c) => {
+        if (c.id !== commentId) return c
+        const liked = !c.likedByMe
+        return { ...c, likedByMe: liked, likes: (c.likes ?? 0) + (liked ? 1 : -1) }
+      })
+      const copy = { ...prev }
+      copy[id] = next
+      return copy
+    })
+  }
+
   const viewCount = (v: Video) => v.viewsNum + (engagement.views[v.id] ?? 0)
 
   const incrementView = (id: number) =>
@@ -189,6 +205,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     getUserComments,
     addComment,
     deleteComment,
+    likeComment,
     viewCount,
     incrementView,
     history: engagement.history,

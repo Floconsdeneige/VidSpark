@@ -39,6 +39,10 @@ export type Comment = {
   replyTo?: { user: string; id: string }
   /** 软删除：保留了被回复上下文时仅隐藏内容 */
   deleted?: boolean
+  /** 评论点赞数（B站式评论点赞） */
+  likes?: number
+  /** 当前账号是否已点赞该评论 */
+  likedByMe?: boolean
 }
 
 export type Category = {

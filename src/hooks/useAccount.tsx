@@ -27,6 +27,13 @@ export type Notification = {
   videoTitle?: string
 }
 
+/** 收藏夹（B站式：收藏可按命名文件夹分组管理） */
+export type FavFolder = {
+  id: string
+  name: string
+  videoIds: number[]
+}
+
 export type Account = {
   id: string
   name: string
@@ -36,8 +43,10 @@ export type Account = {
   following: string[]
   /** 关注本账号的账号 id 列表（社交图的另一面 = 粉丝） */
   followers: string[]
-  /** 本账号收到的通知（关注 / 评论 / 回复） */
+  /** 本账号收到的通知（关注 / 评论 / 回复 / 点赞 / 投币 / 收藏） */
   notifications: Notification[]
+  /** 收藏夹列表；每个账号至少含一个「默认收藏夹」 */
+  favFolders: FavFolder[]
 }
 
 type Store = { accounts: Account[]; activeId: string | null }
@@ -53,14 +62,20 @@ const GUEST: Account = {
   following: [],
   followers: [],
   notifications: [],
+  favFolders: [{ id: 'default', name: '默认收藏夹', videoIds: [] }],
 }
 
 function newId(): string {
   return `id-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 }
 
-// 归一化：兼容旧账号（无 following/followers/notifications 字段）默认补空，避免读 undefined。
+// 归一化：兼容旧账号（无 following/followers/notifications/favFolders 字段）默认补空，避免读 undefined。
 function normalize(a: Partial<Account> & { id: string }): Account {
+  const ff = Array.isArray(a.favFolders) ? a.favFolders.filter((f) => f && f.id) : []
+  // 每个账号至少保留一个「默认收藏夹」，保证收藏动作有落点
+  const favFolders: FavFolder[] = ff.some((f) => f.id === 'default')
+    ? ff
+    : [{ id: 'default', name: '默认收藏夹', videoIds: [] }, ...ff]
   return {
     id: a.id,
     name: (a.name ?? '').trim() || '我',
@@ -69,6 +84,7 @@ function normalize(a: Partial<Account> & { id: string }): Account {
     following: Array.isArray(a.following) ? a.following : [],
     followers: Array.isArray(a.followers) ? a.followers : [],
     notifications: Array.isArray(a.notifications) ? a.notifications.map((n) => ({ ...n })) : [],
+    favFolders,
   }
 }
 
@@ -98,6 +114,7 @@ function load(): Store {
     following: [],
     followers: [],
     notifications: [],
+    favFolders: [{ id: 'default', name: '默认收藏夹', videoIds: [] }],
   }
   const store: Store = { accounts: [seeded], activeId: DEFAULT_ID }
   try {
@@ -124,6 +141,17 @@ export type AccountCtx = {
   setName: (name: string) => void
   setAvatar: (avatar: string) => void
   setBio: (bio: string) => void
+  // —— 收藏夹（B站式） ——
+  /** 当前账号的收藏夹列表 */
+  favFolders: FavFolder[]
+  /** 新建收藏夹，返回新 folder id */
+  createFavFolder: (name: string) => string
+  /** 把视频加入某收藏夹 */
+  favFolderAdd: (videoId: number, folderId: string) => void
+  /** 把视频从某收藏夹移除 */
+  favFolderRemove: (videoId: number, folderId: string) => void
+  /** 把视频从所有收藏夹移除（取消收藏时调用） */
+  favClearAll: (videoId: number) => void
   // —— 社交关系图 ——
   /** 当前账号是否关注了 targetId（真实账号） */
   isFollowingAccount: (targetId: string) => boolean
@@ -166,15 +194,16 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       setStore((s) => ({ accounts: s.accounts, activeId: s.accounts.some((a) => a.id === id) ? id : s.activeId })),
     logout: () => setStore((s) => ({ accounts: s.accounts, activeId: null })),
     register: (name, avatar, bio = '') => {
-      const acc: Account = {
-        id: `acc-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-        name: (name.trim() || '我').slice(0, 16),
-        avatar,
-        bio: bio.slice(0, 80),
-        following: [],
-        followers: [],
-        notifications: [],
-      }
+    const acc: Account = {
+      id: `acc-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      name: (name.trim() || '我').slice(0, 16),
+      avatar,
+      bio: bio.slice(0, 80),
+      following: [],
+      followers: [],
+      notifications: [],
+      favFolders: [{ id: 'default', name: '默认收藏夹', videoIds: [] }],
+    }
       setStore((s) => ({ accounts: [...s.accounts, acc], activeId: acc.id }))
       return acc.id
     },
@@ -215,6 +244,67 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     setName: (name) => ctx.updateActive({ name: name.trim() || '我' }),
     setAvatar: (avatar) => ctx.updateActive({ avatar }),
     setBio: (bio) => ctx.updateActive({ bio }),
+
+    // —— 收藏夹 ——
+    favFolders: activeAccount?.favFolders ?? GUEST.favFolders,
+    createFavFolder: (name) => {
+      if (!activeId) return 'default'
+      const id = `fav-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
+      setStore((s) => ({
+        ...s,
+        accounts: s.accounts.map((a) =>
+          a.id === activeId
+            ? { ...a, favFolders: [...a.favFolders, { id, name: (name.trim() || '新建收藏夹').slice(0, 12), videoIds: [] }] }
+            : a,
+        ),
+      }))
+      return id
+    },
+    favFolderAdd: (videoId, folderId) => {
+      if (!activeId) return
+      setStore((s) => ({
+        ...s,
+        accounts: s.accounts.map((a) =>
+          a.id === activeId
+            ? {
+                ...a,
+                favFolders: a.favFolders.map((f) =>
+                  f.id === folderId && !f.videoIds.includes(videoId)
+                    ? { ...f, videoIds: [videoId, ...f.videoIds] }
+                    : f,
+                ),
+              }
+            : a,
+        ),
+      }))
+    },
+    favFolderRemove: (videoId, folderId) => {
+      if (!activeId) return
+      setStore((s) => ({
+        ...s,
+        accounts: s.accounts.map((a) =>
+          a.id === activeId
+            ? {
+                ...a,
+                favFolders: a.favFolders.map((f) =>
+                  f.id === folderId ? { ...f, videoIds: f.videoIds.filter((x) => x !== videoId) } : f,
+                ),
+              }
+            : a,
+        ),
+      }))
+    },
+    favClearAll: (videoId) => {
+      if (!activeId) return
+      setStore((s) => ({
+        ...s,
+        accounts: s.accounts.map((a) =>
+          a.id === activeId
+            ? { ...a, favFolders: a.favFolders.map((f) => ({ ...f, videoIds: f.videoIds.filter((x) => x !== videoId) })) }
+            : a,
+        ),
+      }))
+    },
 
     // —— 社交关系图 ——
     isFollowingAccount: (targetId) => !!activeAccount?.following.includes(targetId),

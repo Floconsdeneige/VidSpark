@@ -7,12 +7,6 @@ import { useSocial } from '@/hooks/useSocial'
 import { useLibrary } from '@/hooks/useLibrary'
 import { getBlob } from '@/lib/db'
 
-const DANMAKU = [
-  '前排！', '这运镜绝了', '慧眼盯得我发毛', '已三连', 'BGM 是什么',
-  '哈哈哈哈哈', '收藏了', 'UP主好强', '下饭神作', '泪目了',
-  '慕了慕了', '求教程', '循环ing', '太顶了', '沙发',
-]
-
 export default function VideoDetailPage({
   video,
   allVideos,
@@ -32,8 +26,6 @@ export default function VideoDetailPage({
     toggleLike,
     isCoined,
     toggleCoin,
-    isFaved,
-    toggleFav,
     isFollowed,
     toggleFollow,
     isWatchLater,
@@ -42,7 +34,7 @@ export default function VideoDetailPage({
     coins,
     favs,
   } = useInteractions()
-  const { getComments, addComment, deleteComment, viewCount, incrementView, removeUpload } = useLibrary()
+  const { getComments, addComment, deleteComment, likeComment, viewCount, incrementView, removeUpload } = useLibrary()
   const { account, accounts, activeId } = useAccount()
   const social = useSocial()
 
@@ -50,8 +42,16 @@ export default function VideoDetailPage({
   const [progress, setProgress] = useState(0)
   const [toast, setToast] = useState<string | null>(null)
   const [commentText, setCommentText] = useState('')
+  const [commentSort, setCommentSort] = useState<'hot' | 'time'>('time')
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
+  const [sentDanmaku, setSentDanmaku] = useState<string[]>([])
+  const [danmakuText, setDanmakuText] = useState('')
+  const [burst, setBurst] = useState(false)
+  const [folderOpen, setFolderOpen] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
   const videoElRef = useRef<HTMLVideoElement>(null)
+  const longPressed = useRef(false)
+  const tripleTimer = useRef<number | null>(null)
 
   const baseLike = Math.max(1, Math.round(video.viewsNum / 220))
   const baseCoin = Math.max(1, Math.round(video.viewsNum / 380))
@@ -66,8 +66,18 @@ export default function VideoDetailPage({
   const comments = getComments(video.id)
   const [replyTarget, setReplyTarget] = useState<{ user: string; id: string } | null>(null)
 
+  // 真实弹幕：取自该视频的真实评论（预设 + 用户），叠加本会话手发的弹幕。
+  // 不再是写死的假常量——这与「完整功能」的第一性要求一致。
+  const danmakuItems = [
+    ...comments.filter((c) => !c.deleted && c.text.trim()).map((c) => c.text.trim()),
+    ...sentDanmaku,
+  ]
+
   // 把扁平评论按 replyTo 组装成线程树（顶层 + 嵌套回复）
   const threads = buildThreads(comments)
+  // 评论排序：热度 = 顶层按点赞数降序；时间 = 默认（新评论在前）
+  const displayThreads =
+    commentSort === 'hot' ? [...threads].sort((a, b) => (b.likes ?? 0) - (a.likes ?? 0)) : threads
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -164,6 +174,62 @@ export default function VideoDetailPage({
     })
   }
 
+  // 一键三连（B站签名）：确保点赞+投币+收藏全开，并向作者推三类通知
+  const doTriple = () => {
+    const changed = social.triple(video.id)
+    if (changed) {
+      if (authorAccount) {
+        social.pushNotification(authorAccount.id, { type: 'like', fromName: account.name, fromId: activeId ?? undefined, text: '赞了你的视频', videoId: video.id, videoTitle: video.title })
+        social.pushNotification(authorAccount.id, { type: 'coin', fromName: account.name, fromId: activeId ?? undefined, text: '投币了你的视频', videoId: video.id, videoTitle: video.title })
+        social.pushNotification(authorAccount.id, { type: 'fav', fromName: account.name, fromId: activeId ?? undefined, text: '收藏了你的视频', videoId: video.id, videoTitle: video.title })
+      }
+      showToast('已三连 ❤️🪙⭐')
+      setBurst(true)
+      window.setTimeout(() => setBurst(false), 900)
+    } else {
+      showToast('已经三连过啦～')
+    }
+  }
+  // 长按点赞按钮触发三连（同时保留单击单独点赞）
+  const startTriple = () => {
+    longPressed.current = false
+    if (tripleTimer.current) window.clearTimeout(tripleTimer.current)
+    tripleTimer.current = window.setTimeout(() => {
+      longPressed.current = true
+      doTriple()
+    }, 600)
+  }
+  const cancelTriple = () => {
+    if (tripleTimer.current) window.clearTimeout(tripleTimer.current)
+  }
+
+  // 评论点赞：点赞真实账号的评论时向对方推送通知
+  const onLikeComment = (cid: string) => {
+    likeComment(video.id, cid)
+    const c = comments.find((x) => x.id === cid)
+    if (c?.authorId && c.authorId !== activeId) {
+      const target = accounts.find((a) => a.id === c.authorId)
+      if (target) {
+        social.pushNotification(target.id, {
+          type: 'like',
+          fromName: account.name,
+          fromId: activeId ?? undefined,
+          text: `赞了你的评论：${clip(c.text)}`,
+          videoId: video.id,
+          videoTitle: video.title,
+        })
+      }
+    }
+  }
+
+  // 发送一条本会话弹幕（弹幕天然是临时的，不写入评论库）
+  const sendDanmaku = () => {
+    const t = danmakuText.trim()
+    if (!t) return
+    setSentDanmaku((prev) => [...prev, t])
+    setDanmakuText('')
+  }
+
   return (
     <main className="px-6 pb-24 pt-6 md:pb-20">
       <button
@@ -207,9 +273,9 @@ export default function VideoDetailPage({
               </div>
             )}
 
-            {/* 弹幕层 */}
+            {/* 弹幕层（真实评论驱动） */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              {DANMAKU.map((d, i) => (
+              {danmakuItems.map((d, i) => (
                 <span
                   key={i}
                   className="absolute whitespace-nowrap text-sm font-medium text-white drop-shadow"
@@ -224,6 +290,25 @@ export default function VideoDetailPage({
                   {d}
                 </span>
               ))}
+            </div>
+
+            {/* 弹幕发送框 */}
+            <div className="absolute bottom-9 left-3 z-10 flex items-center gap-1">
+              <input
+                value={danmakuText}
+                onChange={(e) => setDanmakuText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') sendDanmaku()
+                }}
+                placeholder="发个弹幕…"
+                className="w-36 rounded-full border border-white/30 bg-black/40 px-3 py-1 text-xs text-white outline-none placeholder:text-white/60"
+              />
+              <button
+                onClick={sendDanmaku}
+                className="rounded-full bg-red-600/90 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-red-600"
+              >
+                发送
+              </button>
             </div>
 
             {/* 进度条 */}
@@ -310,9 +395,16 @@ export default function VideoDetailPage({
           </div>
 
           {/* 互动条 */}
-          <div className="mt-4 flex flex-wrap gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
+              onPointerDown={startTriple}
+              onPointerUp={cancelTriple}
+              onPointerLeave={cancelTriple}
               onClick={() => {
+                if (longPressed.current) {
+                  longPressed.current = false
+                  return
+                }
                 const will = !isLiked(video.id)
                 toggleLike(video.id)
                 showToast(will ? '点赞 +1 ❤️' : '已取消点赞')
@@ -339,16 +431,40 @@ export default function VideoDetailPage({
             </button>
             <button
               onClick={() => {
-                const will = !isFaved(video.id)
-                toggleFav(video.id)
-                showToast(will ? '收藏成功 ⭐' : '已取消收藏')
-                if (will) pushEngagement('fav', '收藏')
+                const will = !social.isFaved(video.id)
+                if (will) {
+                  social.fav(video.id)
+                  pushEngagement('fav', '收藏')
+                  showToast('收藏成功 ⭐')
+                } else {
+                  social.unfav(video.id)
+                  showToast('已取消收藏')
+                }
               }}
               className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition ${
-                isFaved(video.id) ? 'bg-yellow-500 text-white' : 'bg-card text-foreground hover:bg-background'
+                social.isFaved(video.id) ? 'bg-yellow-500 text-white' : 'bg-card text-foreground hover:bg-background'
               }`}
             >
               ⭐ {favs(baseFav, video.id)}
+            </button>
+            <button
+              onClick={() => setFolderOpen(true)}
+              title="收藏到文件夹"
+              className="flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-sm font-medium text-foreground transition hover:bg-background"
+            >
+              📁
+            </button>
+            {/* 一键三连 */}
+            <button
+              onClick={doTriple}
+              className="relative flex items-center gap-1.5 rounded-full bg-gradient-to-r from-pink-500 to-red-500 px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+            >
+              🎉 三连
+              {burst && (
+                <span className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 animate-[vs-burst_0.9s_ease-out] text-lg">
+                  ❤️🪙⭐
+                </span>
+              )}
             </button>
             <button
               onClick={() => {
@@ -356,9 +472,9 @@ export default function VideoDetailPage({
                 showToast('分享链接已复制 🔗')
               }}
               className="flex items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:bg-background"
-              >
-                🔗 分享
-              </button>
+            >
+              🔗 分享
+            </button>
             <button
               onClick={() => {
                 toggleWatchLater(video.id)
@@ -374,9 +490,25 @@ export default function VideoDetailPage({
 
           {/* 评论区 */}
           <div className="mt-8">
-            <h2 className="mb-3 text-lg font-semibold">
-              💬 评论 {comments.filter((c) => !c.deleted).length}
-            </h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">
+                💬 评论 {comments.filter((c) => !c.deleted).length}
+              </h2>
+              <div className="flex gap-1 rounded-full bg-card p-1 text-xs">
+                <button
+                  onClick={() => setCommentSort('time')}
+                  className={`rounded-full px-3 py-1 transition ${commentSort === 'time' ? 'bg-red-600 text-white' : 'text-muted-foreground'}`}
+                >
+                  最新
+                </button>
+                <button
+                  onClick={() => setCommentSort('hot')}
+                  className={`rounded-full px-3 py-1 transition ${commentSort === 'hot' ? 'bg-red-600 text-white' : 'text-muted-foreground'}`}
+                >
+                  最热
+                </button>
+              </div>
+            </div>
             <div className="flex gap-2">
               <input
                 value={commentText}
@@ -436,7 +568,7 @@ export default function VideoDetailPage({
               )}
             </div>
             <div className="mt-4 space-y-4">
-              {threads.map((c) => (
+              {displayThreads.map((c) => (
                 <CommentThread
                   key={c.id}
                   node={c}
@@ -444,6 +576,7 @@ export default function VideoDetailPage({
                   activeId={activeId}
                   onReply={(user, id) => setReplyTarget({ user, id })}
                   onDelete={(cid) => deleteComment(video.id, cid)}
+                  onLike={onLikeComment}
                   onOpenAccount={onOpenAccount}
                 />
               ))}
@@ -477,12 +610,73 @@ export default function VideoDetailPage({
         </aside>
       </div>
 
+      {/* 收藏夹选择浮层 */}
+      {folderOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setFolderOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-border bg-background p-5 text-foreground"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-semibold">收藏到…</h3>
+              <button onClick={() => setFolderOpen(false)} className="text-xl leading-none text-muted-foreground hover:text-foreground">
+                ✕
+              </button>
+            </div>
+            <div className="space-y-2">
+              {social.favFolders.map((f) => (
+                <label
+                  key={f.id}
+                  className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card p-3"
+                >
+                  <input
+                    type="checkbox"
+                    checked={social.inFolder(video.id, f.id)}
+                    onChange={() => social.toggleFolder(video.id, f.id)}
+                    className="h-4 w-4 accent-red-600"
+                  />
+                  <span className="flex-1 text-sm font-medium">{f.name}</span>
+                  <span className="text-xs text-muted-foreground">{f.videoIds.length}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 flex gap-2 border-t border-border pt-3">
+              <input
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                maxLength={12}
+                placeholder="新建收藏夹…"
+                className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-red-500"
+              />
+              <button
+                onClick={() => {
+                  const id = social.createFavFolder(newFolderName)
+                  if (id !== 'default') {
+                    social.toggleFolder(video.id, id)
+                    setNewFolderName('')
+                  }
+                }}
+                disabled={!newFolderName.trim()}
+                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-500 disabled:opacity-50"
+              >
+                新建并收藏
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast */}
       {toast && (
         <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-black/80 px-4 py-2 text-sm text-white shadow-lg">
           {toast}
         </div>
       )}
+
+      <style>{`@keyframes vs-burst { 0% { transform: translate(-50%, 0) scale(0.6); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(-50%, -16px) scale(1.3); opacity: 0; } }`}</style>
     </main>
   )
 }
@@ -511,13 +705,14 @@ function clip(text: string): string {
   return t.length > 18 ? `${t.slice(0, 18)}…` : t
 }
 
-// 单条评论（递归渲染嵌套回复，缩进表达线程）
+// 单条评论（递归渲染嵌套回复，缩进表达线程；支持点赞/回复/删除）
 function CommentThread({
   node,
   depth,
   activeId,
   onReply,
   onDelete,
+  onLike,
   onOpenAccount,
 }: {
   node: CNode
@@ -525,6 +720,7 @@ function CommentThread({
   activeId: string | null
   onReply: (user: string, id: string) => void
   onDelete: (id: string) => void
+  onLike: (id: string) => void
   onOpenAccount?: (id: string) => void
 }) {
   return (
@@ -547,6 +743,15 @@ function CommentThread({
         </div>
         {!node.deleted && (
           <div className="flex shrink-0 flex-col items-end gap-1 self-center">
+            <button
+              onClick={() => onLike(node.id)}
+              className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs transition ${
+                node.likedByMe ? 'text-red-500' : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="点赞评论"
+            >
+              👍 {node.likes ?? 0}
+            </button>
             <button
               onClick={() => onReply(node.user, node.id)}
               className="rounded-full px-2 py-1 text-xs text-muted-foreground transition hover:text-foreground"
@@ -576,6 +781,7 @@ function CommentThread({
               activeId={activeId}
               onReply={onReply}
               onDelete={onDelete}
+              onLike={onLike}
               onOpenAccount={onOpenAccount}
             />
           ))}
