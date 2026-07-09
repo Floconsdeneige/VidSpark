@@ -4,8 +4,9 @@ import type { Video } from '@/data/mock'
 import { useInteractions } from '@/hooks/useInteractions'
 import { useLibrary } from '@/hooks/useLibrary'
 import { useAccount } from '@/hooks/useAccount'
+import { useSocial } from '@/hooks/useSocial'
 
-type Tab = 'uploads' | 'faved' | 'liked' | 'history' | 'watchlater' | 'following'
+type Tab = 'uploads' | 'faved' | 'liked' | 'history' | 'watchlater' | 'following' | 'followers'
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'uploads', label: '我的投稿', icon: '📤' },
@@ -14,6 +15,7 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'history', label: '观看历史', icon: '🕘' },
   { key: 'watchlater', label: '稍后再看', icon: '🕒' },
   { key: 'following', label: '关注', icon: '➕' },
+  { key: 'followers', label: '粉丝', icon: '💗' },
 ]
 
 const AVATARS = ['😎', '🦊', '🐱', '🐼', '🚀', '🌟', '🔥', '🍉', '👾', '🐯', '🦄', '🌈']
@@ -23,17 +25,20 @@ export default function ProfilePage({
   onPlay,
   onGoHome,
   onBack,
+  onOpenAccount,
 }: {
   allVideos: Video[]
   onPlay: (v: Video) => void
   onGoHome: () => void
   onBack: () => void
+  onOpenAccount: (id: string) => void
 }) {
   const { userVideos, removeUpload, history } = useLibrary()
   const { isFaved, isLiked, isWatchLater, followed, toggleFollow, liked, faved, watchLater } =
     useInteractions()
   const { account, accounts, activeId, setName, setAvatar, setBio, logout, switchAccount, register, deleteAccount } =
     useAccount()
+  const social = useSocial()
   const [tab, setTab] = useState<Tab>('uploads')
   const [editing, setEditing] = useState(false)
   const [draftName, setDraftName] = useState(account.name)
@@ -44,7 +49,6 @@ export default function ProfilePage({
   const [addName, setAddName] = useState('')
   const [addAvatar, setAddAvatar] = useState(AVATARS[0])
   const [addBio, setAddBio] = useState('')
-  const [openAuthor, setOpenAuthor] = useState<string | null>(null)
 
   const byId = (id: number) => allVideos.find((v) => v.id === id)
 
@@ -58,9 +62,10 @@ export default function ProfilePage({
     history: history.map(byId).filter((v): v is Video => !!v),
     watchlater: allVideos.filter((v) => isWatchLater(v.id)),
     following: [],
+    followers: [],
   }
 
-  const current = tab === 'following' ? [] : lists[tab]
+  const current = tab === 'following' || tab === 'followers' ? [] : lists[tab]
 
   const saveProfile = () => {
     setName(draftName)
@@ -95,9 +100,10 @@ export default function ProfilePage({
         </div>
 
         {/* 数据统计 */}
-        <div className="mt-5 grid grid-cols-5 gap-2 text-center">
+        <div className="mt-5 grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
           {[
             { label: '投稿', n: userVideos.length },
+            { label: '粉丝', n: social.followersCount(activeId ?? '') },
             { label: '关注', n: followed.length },
             { label: '点赞', n: liked.length },
             { label: '收藏', n: faved.length },
@@ -294,57 +300,82 @@ export default function ProfilePage({
             <span>{t.icon}</span>
             {t.label}
             <span className="opacity-70">
-              {t.key === 'following' ? followed.length : lists[t.key].length}
+              {t.key === 'followers'
+                ? social.followersCount(activeId ?? '')
+                : t.key === 'following'
+                  ? followed.length
+                  : lists[t.key].length}
             </span>
           </button>
         ))}
       </div>
 
       {tab === 'following' ? (
-        followed.length === 0 ? (
+        (() => {
+          const realFollowees = social.followingList(activeId ?? '')
+          const realNames = new Set(realFollowees.map((a) => a.name))
+          const mockFollowees = followed.filter((n) => !realNames.has(n))
+          if (realFollowees.length === 0 && mockFollowees.length === 0)
+            return (
+              <div className="py-16 text-center text-muted-foreground">
+                还没有关注任何人。去视频详情页点「+ 关注」，或逛逛首页关注流吧～
+              </div>
+            )
+          return (
+            <div className="space-y-3">
+              {realFollowees.map((a) => (
+                <AccountRow
+                  key={a.id}
+                  name={a.name}
+                  avatar={a.avatar}
+                  bio={a.bio}
+                  mutual={social.mutualWith(a.id)}
+                  followedByMe
+                  onOpen={() => onOpenAccount(a.id)}
+                  onToggle={() => social.follow(a.name, a.id)}
+                />
+              ))}
+              {mockFollowees.map((name) => (
+                <div key={name} className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-pink-500 text-base font-bold text-white">
+                    {Array.from(name)[0] ?? 'U'}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-semibold">@{name}</div>
+                    <div className="truncate text-xs text-muted-foreground">{videosByAuthor(name).length} 个视频</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`取消关注 @${name}？`)) toggleFollow(name)
+                    }}
+                    className="shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-medium transition hover:border-red-500 hover:text-red-500"
+                  >
+                    取关
+                  </button>
+                </div>
+              ))}
+            </div>
+          )
+        })()
+      ) : tab === 'followers' ? (
+        social.followersCount(activeId ?? '') === 0 ? (
           <div className="py-16 text-center text-muted-foreground">
-            还没有关注任何人。去视频详情页点「+ 关注」，或逛逛首页关注流吧～
+            还没有粉丝。去「动态」页关注其他账号，或发个视频吸引大家吧～
           </div>
         ) : (
-          <div className="space-y-4">
-            {followed.map((author) => {
-              const his = videosByAuthor(author)
-              const open = openAuthor === author
-              return (
-                <div key={author} className="rounded-2xl border border-border bg-card p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-pink-500 text-lg font-bold text-white">
-                      {Array.from(author)[0] ?? 'U'}
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-semibold">@{author}</div>
-                      <div className="text-xs text-muted-foreground">{his.length} 个视频</div>
-                    </div>
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`取消关注 @${author}？`)) toggleFollow(author)
-                      }}
-                      className="rounded-full border border-border px-3 py-1.5 text-xs font-medium transition hover:border-red-500 hover:text-red-500"
-                    >
-                      取关
-                    </button>
-                    <button
-                      onClick={() => setOpenAuthor(open ? null : author)}
-                      className="rounded-full bg-card px-3 py-1.5 text-xs font-medium transition hover:bg-background"
-                    >
-                      {open ? '收起' : '展开'}
-                    </button>
-                  </div>
-                  {open && his.length > 0 && (
-                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {his.map((v) => (
-                        <VideoCard key={v.id} video={v} onClick={() => onPlay(v)} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+          <div className="space-y-3">
+            {social.followersList(activeId ?? '').map((f) => (
+              <AccountRow
+                key={f.id}
+                name={f.name}
+                avatar={f.avatar}
+                bio={f.bio}
+                mutual={social.mutualWith(f.id)}
+                followedByMe={social.isFollowingAccount(f.id)}
+                onOpen={() => onOpenAccount(f.id)}
+                onToggle={() => social.follow(f.name, f.id)}
+              />
+            ))}
           </div>
         )
       ) : current.length === 0 ? (
@@ -397,5 +428,51 @@ export default function ProfilePage({
         ← 返回
       </button>
     </main>
+  )
+}
+
+// 关注/粉丝列表中的账号行（可点开主页、可互相关注/取关）
+function AccountRow({
+  name,
+  avatar,
+  bio,
+  mutual,
+  followedByMe,
+  onOpen,
+  onToggle,
+}: {
+  name: string
+  avatar: string
+  bio: string
+  mutual: boolean
+  followedByMe: boolean
+  onOpen: () => void
+  onToggle: () => void
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
+      <button onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-pink-500 text-base font-bold text-white">
+          {avatar}
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 truncate font-semibold">
+            <span className="truncate">{name}</span>
+            {mutual && <span className="text-xs text-emerald-500">互关</span>}
+          </div>
+          <div className="truncate text-xs text-muted-foreground">{bio || '本地账号'}</div>
+        </div>
+      </button>
+      <button
+        onClick={onToggle}
+        className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+          followedByMe
+            ? 'border border-border bg-background text-muted-foreground hover:text-foreground'
+            : 'bg-red-600 text-white hover:bg-red-500'
+        }`}
+      >
+        {followedByMe ? '已关注' : '+ 关注'}
+      </button>
+    </div>
   )
 }

@@ -3,6 +3,7 @@ import type { Video } from '@/data/mock'
 import { categories, formatViews } from '@/data/mock'
 import { useInteractions } from '@/hooks/useInteractions'
 import { useAccount } from '@/hooks/useAccount'
+import { useSocial } from '@/hooks/useSocial'
 import { useLibrary } from '@/hooks/useLibrary'
 import { getBlob } from '@/lib/db'
 
@@ -39,8 +40,9 @@ export default function VideoDetailPage({
     coins,
     favs,
   } = useInteractions()
-  const { getComments, getUserComments, addComment, deleteComment, viewCount, incrementView, removeUpload } = useLibrary()
-  const { account } = useAccount()
+  const { getComments, addComment, deleteComment, viewCount, incrementView, removeUpload } = useLibrary()
+  const { account, accounts, activeId } = useAccount()
+  const social = useSocial()
 
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -53,8 +55,10 @@ export default function VideoDetailPage({
   const baseCoin = Math.max(1, Math.round(video.viewsNum / 380))
   const baseFav = Math.max(1, Math.round(video.viewsNum / 300))
   const followed = isFollowed(video.author)
+  // 视频作者若是真实账号（非游客/预设），则关注走双向社交图并互关
+  const authorAccount = accounts.find((a) => a.name === video.author && a.id !== activeId) ?? null
   const comments = getComments(video.id)
-  const myCommentsCount = getUserComments(video.id).length
+  const [replyTarget, setReplyTarget] = useState<{ user: string; id: string } | null>(null)
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -225,10 +229,28 @@ export default function VideoDetailPage({
           )}
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
             <span>@{video.author}</span>
+            {authorAccount && social.mutualWith(authorAccount.id) && (
+              <span className="rounded-full bg-emerald-600/15 px-2 py-0.5 text-xs font-medium text-emerald-500">
+                互关
+              </span>
+            )}
             <button
               onClick={() => {
-                toggleFollow(video.author)
-                showToast(followed ? `已取消关注 @${video.author}` : `已关注 @${video.author} 👤`)
+                if (authorAccount) {
+                  social.follow(video.author, authorAccount.id)
+                  showToast(
+                    followed
+                      ? `已取消关注 @${video.author}`
+                      : `已关注 @${video.author} 👤`,
+                  )
+                } else {
+                  toggleFollow(video.author)
+                  showToast(
+                    followed
+                      ? `已取消关注 @${video.author}`
+                      : `已关注 @${video.author} 👤`,
+                  )
+                }
               }}
               className={`rounded-full px-3 py-0.5 text-xs font-medium transition ${
                 followed
@@ -314,24 +336,70 @@ export default function VideoDetailPage({
 
           {/* 评论区 */}
           <div className="mt-8">
-            <h2 className="mb-3 text-lg font-semibold">💬 评论 {comments.length}</h2>
+            <h2 className="mb-3 text-lg font-semibold">
+              💬 评论 {comments.filter((c) => !c.deleted).length}
+            </h2>
             <div className="flex gap-2">
               <input
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && commentText.trim()) {
-                    addComment(video.id, commentText, account.name)
+                    if (replyTarget) {
+                      addComment(video.id, commentText, account.name, {
+                        authorId: activeId ?? undefined,
+                        replyTo: replyTarget,
+                      })
+                      // 回复真实账号的评论 → 向对方推送通知
+                      const target = accounts.find(
+                        (a) => a.name === replyTarget.user && a.id !== activeId,
+                      )
+                      if (target) {
+                        social.pushNotification(target.id, {
+                          type: 'reply',
+                          fromName: account.name,
+                          fromId: activeId ?? undefined,
+                          text: `回复了你的评论`,
+                          videoId: video.id,
+                          videoTitle: video.title,
+                        })
+                      }
+                    } else {
+                      addComment(video.id, commentText, account.name, {
+                        authorId: activeId ?? undefined,
+                      })
+                      // 评论真实账号的视频 → 向作者推送通知
+                      if (authorAccount) {
+                        social.pushNotification(authorAccount.id, {
+                          type: 'comment',
+                          fromName: account.name,
+                          fromId: activeId ?? undefined,
+                          text: `评论了你的视频`,
+                          videoId: video.id,
+                          videoTitle: video.title,
+                        })
+                      }
+                    }
                     setCommentText('')
+                    setReplyTarget(null)
                   }
                 }}
-                placeholder="发一条友善的评论…（回车发送）"
+                placeholder={replyTarget ? `回复 @${replyTarget.user}…（回车发送）` : '发一条友善的评论…（回车发送）'}
                 className="w-full rounded-full border border-border bg-card px-4 py-2 text-sm outline-none focus:border-red-500"
               />
+              {replyTarget && (
+                <button
+                  onClick={() => setReplyTarget(null)}
+                  className="shrink-0 rounded-full border border-border px-3 py-2 text-sm text-muted-foreground transition hover:text-foreground"
+                  title="取消回复"
+                >
+                  取消
+                </button>
+              )}
             </div>
             <div className="mt-4 space-y-3">
-              {comments.map((c, i) => (
-                <div key={i} className="flex items-start gap-3">
+              {comments.map((c) => (
+                <div key={c.id} className="flex items-start gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white">
                     {c.avatar}
                   </div>
@@ -340,16 +408,32 @@ export default function VideoDetailPage({
                       <span className="font-semibold">@{c.user}</span>{' '}
                       <span className="text-xs text-muted-foreground">· {c.time}</span>
                     </div>
-                    <div className="text-sm text-muted-foreground">{c.text}</div>
+                    {c.replyTo && (
+                      <div className="text-xs text-muted-foreground">↩ 回复 @{c.replyTo.user}</div>
+                    )}
+                    <div className="text-sm text-muted-foreground">
+                      {c.deleted ? '该评论已删除' : c.text}
+                    </div>
                   </div>
-                  {i < myCommentsCount && (
-                    <button
-                      onClick={() => deleteComment(video.id, i)}
-                      className="shrink-0 self-center rounded-full px-2 py-1 text-xs text-muted-foreground transition hover:text-red-500"
-                      title="删除我的评论"
-                    >
-                      删除
-                    </button>
+                  {!c.deleted && (
+                    <div className="flex shrink-0 flex-col items-end gap-1 self-center">
+                      <button
+                        onClick={() => setReplyTarget({ user: c.user, id: c.id })}
+                        className="rounded-full px-2 py-1 text-xs text-muted-foreground transition hover:text-foreground"
+                        title="回复"
+                      >
+                        回复
+                      </button>
+                      {c.authorId === activeId && (
+                        <button
+                          onClick={() => deleteComment(video.id, c.id)}
+                          className="rounded-full px-2 py-1 text-xs text-muted-foreground transition hover:text-red-500"
+                          title="删除我的评论"
+                        >
+                          删除
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               ))}

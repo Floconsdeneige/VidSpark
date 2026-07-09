@@ -58,9 +58,15 @@ export type LibraryCtx = {
   getComments: (id: number) => Comment[]
   /** 仅用户持久化评论（可删除），新评论在前 */
   getUserComments: (id: number) => Comment[]
-  addComment: (id: number, text: string, author?: string) => void
-  /** 删除某视频的第 index 条用户评论（index 对应用户评论数组下标） */
-  deleteComment: (id: number, index: number) => void
+  /** 发评论，返回新评论 id；可带 authorId（真实账号）与 replyTo（一级回复目标） */
+  addComment: (
+    id: number,
+    text: string,
+    author?: string,
+    opts?: { authorId?: string; replyTo?: { user: string; id: string } },
+  ) => string
+  /** 按稳定 id 删除某条用户评论；若该评论已被回复则软删除（保留回复上下文） */
+  deleteComment: (id: number, commentId: string) => void
   /** 播放量 = 基础量 + 增量 */
   viewCount: (v: Video) => number
   /** 打开视频时调用：播放量 +1 并写入观看历史 */
@@ -128,21 +134,35 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  const addComment = (id: number, text: string, author = '我') => {
+  const addComment = (
+    id: number,
+    text: string,
+    author = '我',
+    opts?: { authorId?: string; replyTo?: { user: string; id: string } },
+  ): string => {
+    const cid = `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
     const item: Comment = {
+      id: cid,
       user: author,
+      authorId: opts?.authorId,
       avatar: Array.from(author)[0] ?? '我',
       text: text.trim(),
       time: '刚刚',
+      replyTo: opts?.replyTo,
     }
     setComments((prev) => ({ ...prev, [id]: [item, ...(prev[id] ?? [])] }))
+    return cid
   }
 
-  const deleteComment = (id: number, index: number) => {
+  const deleteComment = (id: number, commentId: string) => {
     setComments((prev) => {
       const arr = prev[id] ?? []
-      if (index < 0 || index >= arr.length) return prev
-      const next = arr.filter((_, i) => i !== index)
+      const target = arr.find((c) => c.id === commentId)
+      if (!target) return prev
+      const hasReplies = arr.some((c) => c.replyTo?.id === commentId)
+      const next: Comment[] = hasReplies
+        ? arr.map((c) => (c.id === commentId ? { ...c, deleted: true, text: '', user: '已删除' } : c))
+        : arr.filter((c) => c.id !== commentId)
       const copy = { ...prev }
       if (next.length === 0) delete copy[id]
       else copy[id] = next
@@ -181,4 +201,13 @@ export function useLibrary(): LibraryCtx {
   const c = useContext(Ctx)
   if (!c) throw new Error('useLibrary 必须在 LibraryProvider 内使用')
   return c
+}
+
+/** 读取任意账号的上传视频（供「他人主页」展示用，只读不写） */
+export function readAccountUploads(id: string): Video[] {
+  try {
+    return loadJSON<Video[]>(uploadsKey(id), [])
+  } catch {
+    return []
+  }
 }

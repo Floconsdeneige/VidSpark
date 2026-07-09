@@ -25,10 +25,18 @@ export type Video = {
 
 /** 评论条目 */
 export type Comment = {
+  /** 稳定 id（用于回复关联与安全删除，不再依赖数组下标） */
+  id: string
   user: string
+  /** 真实账号 id（预设/游客评论为 undefined） */
+  authorId?: string
   avatar: string
   text: string
   time: string
+  /** 回复目标（一级回复） */
+  replyTo?: { user: string; id: string }
+  /** 软删除：保留了被回复上下文时仅隐藏内容 */
+  deleted?: boolean
 }
 
 export type Category = {
@@ -87,9 +95,9 @@ export function formatViews(n: number): string {
 
 /** 默认视频的预设评论（与用户持久化评论合并展示） */
 export const PRESET_COMMENTS: Comment[] = [
-  { user: '路人甲', avatar: '路', text: '看完直接关注了，质量真高', time: '2小时前' },
-  { user: '弹幕护卫', avatar: '弹', text: '这弹幕密度，妥妥的爆款相', time: '5小时前' },
-  { user: '夜猫子', avatar: '夜', text: '半夜刷到，救命好上头', time: '昨天' },
+  { id: 'preset-1', user: '路人甲', avatar: '路', text: '看完直接关注了，质量真高', time: '2小时前' },
+  { id: 'preset-2', user: '弹幕护卫', avatar: '弹', text: '这弹幕密度，妥妥的爆款相', time: '5小时前' },
+  { id: 'preset-3', user: '夜猫子', avatar: '夜', text: '半夜刷到，救命好上头', time: '昨天' },
 ]
 
 export type FeedItem = {

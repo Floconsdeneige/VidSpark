@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { Video } from '@/data/mock'
 import { useInteractions } from '@/hooks/useInteractions'
 import { useAccount } from '@/hooks/useAccount'
+import { useSocial } from '@/hooks/useSocial'
 
 type FItem = {
   key: string
@@ -30,13 +31,22 @@ export default function FeedPage({
   allVideos,
   userUploads,
   onPlay,
+  onOpenAccount,
 }: {
   allVideos: Video[]
   userUploads: Video[]
   onPlay: (v: Video) => void
+  onOpenAccount: (id: string) => void
 }) {
   const { liked, coined, faved, followed } = useInteractions()
-  const { account } = useAccount()
+  const { account, accounts, activeId } = useAccount()
+  const social = useSocial()
+
+  // 推荐关注：尚未关注的真实账号（不含自己）
+  const recommended = useMemo(
+    () => accounts.filter((a) => a.id !== activeId && !social.isFollowingAccount(a.id)).slice(0, 12),
+    [accounts, activeId, social],
+  )
 
   const items = useMemo<FItem[]>(() => {
     const out: FItem[] = []
@@ -109,6 +119,41 @@ export default function FeedPage({
       <p className="mb-6 text-sm text-muted-foreground">
         根据你的关注、投稿与互动实时生成 · @{account.name}
       </p>
+
+      {/* 推荐关注：发现其他真实账号 */}
+      {recommended.length > 0 && (
+        <div className="mb-8">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+            🤝 推荐关注
+            <span className="text-xs font-normal text-muted-foreground">还有 {recommended.length} 位用户</span>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {recommended.map((a) => (
+              <div
+                key={a.id}
+                className="flex w-44 shrink-0 flex-col items-center rounded-2xl border border-border bg-card p-4 text-center"
+              >
+                <button onClick={() => onOpenAccount(a.id)} className="flex flex-col items-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-pink-500 text-2xl font-bold text-white">
+                    {a.avatar}
+                  </div>
+                  <div className="mt-2 max-w-full truncate font-semibold">{a.name}</div>
+                </button>
+                <div className="mt-0.5 line-clamp-1 w-full text-xs text-muted-foreground">
+                  {a.bio || '本地账号'}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">{social.followersCount(a.id)} 粉丝</div>
+                <button
+                  onClick={() => social.follow(a.name, a.id)}
+                  className="mt-3 w-full rounded-full bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-red-500"
+                >
+                  + 关注
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {items.length === 0 ? (
         <div className="py-16 text-center text-muted-foreground">

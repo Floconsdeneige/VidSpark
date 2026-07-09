@@ -12,7 +12,9 @@ import { AccountProvider, useAccount } from '@/hooks/useAccount'
 import AccountGate from '@/components/AccountGate'
 import { InteractionsProvider } from '@/hooks/useInteractions'
 import { LibraryProvider, useLibrary } from '@/hooks/useLibrary'
+import { useSocial } from '@/hooks/useSocial'
 import { ThemeProvider, useTheme } from '@/hooks/useTheme'
+import AccountProfile from '@/components/AccountProfile'
 import { videos as baseVideos, type Video } from '@/data/mock'
 
 type View = 'home' | 'popular' | 'categories' | 'upload' | 'feed' | 'profile' | 'settings' | 'detail'
@@ -52,9 +54,24 @@ const navIcon: Record<string, string> = {
 function Shell() {
   const { userVideos, addUpload } = useLibrary()
   const { theme, toggleTheme } = useTheme()
+  const social = useSocial()
   const [view, setView] = useState<View>('home')
   const [searchQuery, setSearchQuery] = useState('')
   const [detailVideo, setDetailVideo] = useState<Video | null>(null)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [profileAccountId, setProfileAccountId] = useState<string | null>(null)
+
+  const openNotif = () => {
+    setNotifOpen((v) => !v)
+    if (!notifOpen) social.markNotificationsRead()
+  }
+  const onNotifClick = (videoId?: number) => {
+    setNotifOpen(false)
+    if (videoId != null) {
+      const v = allVideos.find((x) => x.id === videoId)
+      if (v) play(v)
+    }
+  }
 
   // 全站视频 = 用户上传(置顶) + 默认库
   const allVideos: Video[] = [...userVideos, ...baseVideos]
@@ -161,6 +178,52 @@ function Shell() {
           {theme === 'dark' ? '☀️' : '🌙'}
         </button>
 
+        {/* 通知铃铛 */}
+        <div className="relative">
+          <button
+            onClick={openNotif}
+            title="通知"
+            className="relative rounded-full border border-border bg-card px-3 py-2 text-sm transition hover:bg-background"
+          >
+            🔔
+            {social.unreadCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+                {social.unreadCount > 99 ? '99+' : social.unreadCount}
+              </span>
+            )}
+          </button>
+          {notifOpen && (
+            <div className="absolute right-0 top-12 z-40 max-h-[70vh] w-80 overflow-y-auto rounded-2xl border border-border bg-card p-2 shadow-xl">
+              <div className="px-2 py-1.5 text-sm font-semibold">通知</div>
+              {social.notifications.length === 0 ? (
+                <div className="px-2 py-8 text-center text-sm text-muted-foreground">暂时没有通知</div>
+              ) : (
+                social.notifications.map((n) => (
+                  <button
+                    key={n.id}
+                    onClick={() => onNotifClick(n.videoId)}
+                    className={`flex w-full items-start gap-2 rounded-xl px-2 py-2 text-left text-sm transition hover:bg-background ${
+                      n.read ? '' : 'bg-red-600/5'
+                    }`}
+                  >
+                    <span className="mt-0.5 text-base">
+                      {n.type === 'follow' ? '➕' : n.type === 'comment' ? '💬' : '↩️'}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="font-semibold">@{n.fromName}</span>{' '}
+                      <span className="text-muted-foreground">{n.text}</span>
+                      {n.videoTitle && (
+                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">《{n.videoTitle}》</span>
+                      )}
+                    </span>
+                    {!n.read && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-red-600" />}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
         <button
           onClick={() => go('upload')}
           className="rounded-full bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-500"
@@ -183,13 +246,21 @@ function Shell() {
           onPlay={play}
         />
       )}
-      {view === 'feed' && <FeedPage allVideos={allVideos} userUploads={userVideos} onPlay={play} />}
-      {view === 'profile' && <ProfilePage allVideos={allVideos} onPlay={play} onGoHome={() => go('home')} onBack={() => go('home')} />}
+      {view === 'feed' && <FeedPage allVideos={allVideos} userUploads={userVideos} onPlay={play} onOpenAccount={setProfileAccountId} />}
+      {view === 'profile' && <ProfilePage allVideos={allVideos} onPlay={play} onGoHome={() => go('home')} onBack={() => go('home')} onOpenAccount={setProfileAccountId} />}
       {view === 'settings' && <SettingsPage onBack={() => go('home')} />}
       {view === 'detail' && detailVideo && (
         // key 绑定视频 id：从相关推荐点另一视频时，重建页面以重置播放/评论状态
         <VideoDetailPage key={detailVideo.id} video={detailVideo} allVideos={allVideos} onBack={() => go('home')} onPlay={play} />
       )}
+
+      {/* 他人主页浮层 */}
+      <AccountProfile
+        accountId={profileAccountId}
+        onClose={() => setProfileAccountId(null)}
+        onPlay={play}
+        onOpenAccount={setProfileAccountId}
+      />
 
       {/* 悬浮快捷导航：BubbleMenu（点开弹出大药丸按钮）。
           定位交给 .vs-bubble 类（含移动端避让底栏的媒体查询），避免内联样式覆盖。 */}
