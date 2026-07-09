@@ -3,8 +3,12 @@ import {
   useContext,
   useState,
   useEffect,
+  useRef,
   type ReactNode,
 } from 'react'
+import { saveJSON } from '@/lib/db'
+import { useAccount } from '@/hooks/useAccount'
+import { interactionsKey, LEGACY } from '@/lib/accountKeys'
 
 export type Interactions = {
   liked: number[]
@@ -14,24 +18,38 @@ export type Interactions = {
   watchLater: number[]
 }
 
-const KEY = 'vidspark_interactions_v1'
 const empty: Interactions = { liked: [], coined: [], faved: [], followed: [], watchLater: [] }
 
-function load(): Interactions {
+function parse(raw: string): Interactions {
+  const p = JSON.parse(raw) as Partial<Interactions>
+  return {
+    liked: p.liked ?? [],
+    coined: p.coined ?? [],
+    faved: p.faved ?? [],
+    followed: p.followed ?? [],
+    watchLater: p.watchLater ?? [],
+  }
+}
+
+// 按账号读取；默认账号 'me' 首次启动时把旧全局键迁移到按账号键，避免老用户数据丢失。
+function load(id: string | null): Interactions {
+  if (!id) return empty
+  const key = interactionsKey(id)
   try {
-    const raw = localStorage.getItem(KEY)
-    if (!raw) return empty
-    const p = JSON.parse(raw) as Partial<Interactions>
-    return {
-      liked: p.liked ?? [],
-      coined: p.coined ?? [],
-      faved: p.faved ?? [],
-      followed: p.followed ?? [],
-      watchLater: p.watchLater ?? [],
+    const raw = localStorage.getItem(key)
+    if (raw) return parse(raw)
+    if (id === 'me') {
+      const legacy = localStorage.getItem(LEGACY.interactions)
+      if (legacy) {
+        localStorage.setItem(key, legacy)
+        localStorage.removeItem(LEGACY.interactions)
+        return parse(legacy)
+      }
     }
   } catch {
-    return empty
+    /* 忽略 */
   }
+  return empty
 }
 
 export type InteractionsCtx = {
@@ -58,15 +76,24 @@ export type InteractionsCtx = {
 const Ctx = createContext<InteractionsCtx | null>(null)
 
 export function InteractionsProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<Interactions>(load)
+  const { activeId } = useAccount()
+  const [state, setState] = useState<Interactions>(() => load(activeId))
+  // 切换账号瞬间：先以新账号数据重载，再阻止一次"把旧账号数据写进新账号键"的误写
+  const skipSave = useRef(false)
 
   useEffect(() => {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(state))
-    } catch {
-      /* 忽略存储异常 */
+    skipSave.current = true
+    setState(load(activeId))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId])
+
+  useEffect(() => {
+    if (skipSave.current) {
+      skipSave.current = false
+      return
     }
-  }, [state])
+    if (activeId) saveJSON(interactionsKey(activeId), state)
+  }, [state, activeId])
 
   const toggle = (key: keyof Interactions, val: number | string) => {
     setState((s) => {

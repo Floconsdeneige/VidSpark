@@ -30,12 +30,20 @@ export default function ProfilePage({
   onBack: () => void
 }) {
   const { userVideos, removeUpload, history } = useLibrary()
-  const { isFaved, isLiked, isWatchLater, followed, toggleFollow } = useInteractions()
-  const { account, setName, setAvatar } = useAccount()
+  const { isFaved, isLiked, isWatchLater, followed, toggleFollow, liked, faved, watchLater } =
+    useInteractions()
+  const { account, accounts, activeId, setName, setAvatar, setBio, logout, switchAccount, register, deleteAccount } =
+    useAccount()
   const [tab, setTab] = useState<Tab>('uploads')
   const [editing, setEditing] = useState(false)
   const [draftName, setDraftName] = useState(account.name)
   const [draftAvatar, setDraftAvatar] = useState(account.avatar)
+  const [draftBio, setDraftBio] = useState(account.bio)
+  const [showAccounts, setShowAccounts] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
+  const [addName, setAddName] = useState('')
+  const [addAvatar, setAddAvatar] = useState(AVATARS[0])
+  const [addBio, setAddBio] = useState('')
   const [openAuthor, setOpenAuthor] = useState<string | null>(null)
 
   const byId = (id: number) => allVideos.find((v) => v.id === id)
@@ -57,29 +65,168 @@ export default function ProfilePage({
   const saveProfile = () => {
     setName(draftName)
     setAvatar(draftAvatar)
+    setBio(draftBio)
     setEditing(false)
   }
 
   return (
     <main className="px-6 pb-20 pt-8">
-      <div className="mb-6 flex items-center gap-3">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-pink-500 text-2xl font-bold text-white">
-          {account.avatar}
+      {/* 账号卡 */}
+      <div className="mb-6 rounded-2xl border border-border bg-card p-5">
+        <div className="flex items-center gap-4">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-pink-500 text-3xl font-bold text-white">
+            {account.avatar}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-bold">{account.name}</h1>
+            <p className="truncate text-sm text-muted-foreground">{account.bio || '这个人很懒，什么都没写～'}</p>
+          </div>
+          <button
+            onClick={() => {
+              setDraftName(account.name)
+              setDraftAvatar(account.avatar)
+              setDraftBio(account.bio)
+              setEditing((e) => !e)
+            }}
+            className="shrink-0 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium transition hover:bg-card"
+          >
+            ✏️ 编辑资料
+          </button>
         </div>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">{account.name}</h1>
-          <p className="text-sm text-muted-foreground">本地账号 · 数据保存在此浏览器</p>
+
+        {/* 数据统计 */}
+        <div className="mt-5 grid grid-cols-5 gap-2 text-center">
+          {[
+            { label: '投稿', n: userVideos.length },
+            { label: '关注', n: followed.length },
+            { label: '点赞', n: liked.length },
+            { label: '收藏', n: faved.length },
+            { label: '稍后再看', n: watchLater.length },
+          ].map((s) => (
+            <div key={s.label} className="rounded-xl bg-background py-3">
+              <div className="text-lg font-bold">{s.n}</div>
+              <div className="text-xs text-muted-foreground">{s.label}</div>
+            </div>
+          ))}
         </div>
-        <button
-          onClick={() => {
-            setDraftName(account.name)
-            setDraftAvatar(account.avatar)
-            setEditing((e) => !e)
-          }}
-          className="rounded-full border border-border bg-card px-4 py-2 text-sm font-medium transition hover:bg-background"
-        >
-          ✏️ 编辑资料
-        </button>
+
+        {/* 账号管理 */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            onClick={() => {
+              setShowAccounts((v) => !v)
+              setShowAdd(false)
+            }}
+            className="rounded-full border border-border bg-background px-4 py-2 text-sm transition hover:bg-card"
+          >
+            🔄 切换账号
+          </button>
+          <button
+            onClick={() => {
+              if (window.confirm('确定退出登录吗？之后可在账号列表里切换或创建其他账号。')) logout()
+            }}
+            className="rounded-full border border-border bg-background px-4 py-2 text-sm transition hover:bg-card"
+          >
+            🚪 退出登录
+          </button>
+          {accounts.length > 1 && (
+            <button
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `删除账号「${account.name}」？该账号的全部本地数据（投稿/点赞/收藏/历史等）将被清除，不可恢复。`,
+                  )
+                )
+                  deleteAccount(activeId!)
+              }}
+              className="rounded-full border border-border bg-background px-4 py-2 text-sm text-muted-foreground transition hover:text-red-500"
+            >
+              🗑 删除账号
+            </button>
+          )}
+        </div>
+
+        {/* 切换账号面板 */}
+        {showAccounts && (
+          <div className="mt-4 rounded-xl border border-border bg-background p-4">
+            <div className="mb-2 text-sm font-medium">选择账号</div>
+            <div className="space-y-2">
+              {accounts.map((a) => (
+                <button
+                  key={a.id}
+                  onClick={() => {
+                    switchAccount(a.id)
+                    setShowAccounts(false)
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-xl border p-2 text-left transition hover:border-red-500 ${
+                    a.id === activeId ? 'border-red-500 bg-card' : 'border-border bg-background'
+                  }`}
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-pink-500 text-base font-bold text-white">
+                    {a.avatar}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">{a.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">{a.bio || '本地账号'}</div>
+                  </div>
+                  {a.id === activeId && <span className="text-xs text-red-500">当前</span>}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowAdd((v) => !v)}
+              className="mt-3 text-sm text-red-500 transition hover:underline"
+            >
+              + 添加账号
+            </button>
+            {showAdd && (
+              <div className="mt-3 space-y-3 border-t border-border pt-3">
+                <input
+                  value={addName}
+                  onChange={(e) => setAddName(e.target.value)}
+                  maxLength={16}
+                  placeholder="新账号昵称"
+                  className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-red-500"
+                />
+                <div className="flex flex-wrap gap-2">
+                  {AVATARS.map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => setAddAvatar(a)}
+                      className={`flex h-9 w-9 items-center justify-center rounded-full border-2 text-lg transition ${
+                        addAvatar === a ? 'border-red-500 bg-card' : 'border-transparent hover:border-border'
+                      }`}
+                    >
+                      {a}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  value={addBio}
+                  onChange={(e) => setAddBio(e.target.value)}
+                  maxLength={80}
+                  placeholder="个性签名（可选）"
+                  className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-red-500"
+                />
+                <button
+                  onClick={() => {
+                    if (!addName.trim()) return
+                    register(addName, addAvatar, addBio)
+                    setAddName('')
+                    setAddBio('')
+                    setShowAdd(false)
+                    setShowAccounts(false)
+                  }}
+                  disabled={!addName.trim()}
+                  className="w-full rounded-full bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-500 disabled:opacity-50"
+                >
+                  创建并登录
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 编辑资料面板 */}
@@ -108,6 +255,15 @@ export default function ProfilePage({
               </button>
             ))}
           </div>
+          <div className="mb-2 mt-4 text-sm font-medium">个性签名</div>
+          <textarea
+            value={draftBio}
+            onChange={(e) => setDraftBio(e.target.value)}
+            rows={2}
+            maxLength={80}
+            placeholder="一句话介绍自己…"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-red-500"
+          />
           <div className="mt-5 flex justify-end gap-2">
             <button
               onClick={() => setEditing(false)}

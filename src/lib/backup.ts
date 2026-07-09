@@ -1,17 +1,19 @@
 // VidSpark 本地数据备份 / 恢复 / 清空
-// 把分散在各 localStorage 键 + IndexedDB 的视频 blob 汇总成一个 JSON 包，
-// 解决"纯前端模拟器跨设备不共享、清空站点数据即丢失"的固有短板。
+// 把分散在各 localStorage 键（含按账号命名空间的互动/库数据 + 账号列表）+ IndexedDB 的视频 blob
+// 汇总成一个 JSON 包，解决"纯前端模拟器跨设备不共享、清空站点数据即丢失"的固有短板。
 
 import { getAllBlobs, putBlobFromBase64, clearAllBlobs } from '@/lib/db'
+import { isDataKey } from '@/lib/accountKeys'
 
-/** 需要纳入备份的 localStorage 键（与各处 KEY 保持一致） */
-const LS_KEYS = [
-  'vidspark_account_v1',
-  'vidspark_interactions_v1',
-  'vidspark_uploads_v1',
-  'vidspark_comments_v1',
-  'vidspark_engagement_v1',
-]
+/** 扫描所有属于 VidSpark 的 localStorage 数据键（按账号前缀，含旧全局键） */
+function allDataKeys(): string[] {
+  const keys: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i)
+    if (k && isDataKey(k)) keys.push(k)
+  }
+  return keys
+}
 
 export type Backup = {
   app: 'VidSpark'
@@ -23,17 +25,17 @@ export type Backup = {
 
 /** 生成一份完整备份包 */
 export async function exportBackup(): Promise<Backup> {
-  const localStorage: Record<string, unknown> = {}
-  for (const k of LS_KEYS) {
+  const localStorageData: Record<string, unknown> = {}
+  for (const k of allDataKeys()) {
     const raw = localStorageGet(k)
-    if (raw != null) localStorage[k] = JSON.parse(raw)
+    if (raw != null) localStorageData[k] = JSON.parse(raw)
   }
   const blobs = await getAllBlobs()
   return {
     app: 'VidSpark',
     version: 1,
     exportedAt: new Date().toISOString(),
-    localStorage,
+    localStorage: localStorageData,
     blobs,
   }
 }
@@ -43,10 +45,8 @@ export async function importBackup(data: Backup): Promise<void> {
   if (data.app !== 'VidSpark' || data.version !== 1) {
     throw new Error('不是有效的 VidSpark 备份文件')
   }
-  for (const k of LS_KEYS) {
-    if (k in data.localStorage) {
-      localStorageSet(k, JSON.stringify(data.localStorage[k]))
-    }
+  for (const [k, v] of Object.entries(data.localStorage ?? {})) {
+    if (isDataKey(k)) localStorageSet(k, JSON.stringify(v))
   }
   for (const [key, b64] of Object.entries(data.blobs ?? {})) {
     try {
@@ -57,24 +57,19 @@ export async function importBackup(data: Backup): Promise<void> {
   }
 }
 
-/** 清空全部本地数据（localStorage 相关键 + IndexedDB blobs） */
+/** 清空全部本地数据（VidSpark 相关 localStorage 键 + IndexedDB blobs） */
 export async function clearAllLocal(): Promise<void> {
-  for (const k of LS_KEYS) localStorageRemove(k)
+  for (const k of allDataKeys()) localStorageRemove(k)
   await clearAllBlobs()
 }
 
 /** 估算本地数据占用（localStorage 字节 + blob 数量），用于设置页展示 */
 export function localStats(): { lsBytes: number; keys: number; blobCount: number } {
   let lsBytes = 0
-  let keys = 0
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i)
-    if (k && LS_KEYS.includes(k)) {
-      lsBytes += (k.length + (localStorage.getItem(k)?.length ?? 0)) * 2
-      keys++
-    }
+  for (const k of allDataKeys()) {
+    lsBytes += (k.length + (localStorage.getItem(k)?.length ?? 0)) * 2
   }
-  return { lsBytes, keys, blobCount: -1 } // blobCount 需异步获取，见 localBlobCount
+  return { lsBytes, keys: allDataKeys().length, blobCount: -1 } // blobCount 需异步获取，见 localBlobCount
 }
 
 export async function localBlobCount(): Promise<number> {

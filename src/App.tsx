@@ -8,7 +8,8 @@ import FeedPage from '@/pages/FeedPage'
 import ProfilePage from '@/pages/ProfilePage'
 import SettingsPage from '@/pages/SettingsPage'
 import VideoDetailPage from '@/pages/VideoDetailPage'
-import { AccountProvider } from '@/hooks/useAccount'
+import { AccountProvider, useAccount } from '@/hooks/useAccount'
+import AccountGate from '@/components/AccountGate'
 import { InteractionsProvider } from '@/hooks/useInteractions'
 import { LibraryProvider, useLibrary } from '@/hooks/useLibrary'
 import { ThemeProvider, useTheme } from '@/hooks/useTheme'
@@ -230,10 +231,17 @@ export default function App() {
       <AccountProvider>
         <InteractionsProvider>
           <LibraryProvider>
-            <Shell />
+            <Root />
           </LibraryProvider>
         </InteractionsProvider>
       </AccountProvider>
     </ThemeProvider>
   )
+}
+
+// 登录网关：未登录(activeId 为空)展示账号选择/注册，登录后进入应用。
+// 这样"账号"才是有意义的身份——登出后数据视图随之隔离。
+function Root() {
+  const { activeId } = useAccount()
+  return activeId ? <Shell /> : <AccountGate />
 }

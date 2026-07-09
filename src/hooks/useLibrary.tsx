@@ -3,21 +3,54 @@ import {
   useContext,
   useState,
   useEffect,
+  useRef,
   type ReactNode,
 } from 'react'
 import { loadJSON, saveJSON, deleteBlob } from '@/lib/db'
 import { PRESET_COMMENTS, type Comment, type Video } from '@/data/mock'
-
-const UPLOAD_KEY = 'vidspark_uploads_v1'
-const COMMENT_KEY = 'vidspark_comments_v1'
-const ENGAGE_KEY = 'vidspark_engagement_v1'
+import { useAccount } from '@/hooks/useAccount'
+import { uploadsKey, commentsKey, engagementKey, LEGACY } from '@/lib/accountKeys'
 
 type Engagement = { views: Record<number, number>; history: number[] }
 
 const emptyEngage: Engagement = { views: {}, history: [] }
 
+// 读取按账号键；默认账号 'me' 首次启动把旧全局键迁移到按账号键（保护老用户数据）。
+function migrate(id: string | null, perKey: string, legacyKey: string): string | null {
+  if (!id) return null
+  try {
+    const raw = localStorage.getItem(perKey)
+    if (raw) return raw
+    if (id === 'me') {
+      const legacy = localStorage.getItem(legacyKey)
+      if (legacy) {
+        localStorage.setItem(perKey, legacy)
+        localStorage.removeItem(legacyKey)
+        return legacy
+      }
+    }
+  } catch {
+    /* 忽略 */
+  }
+  return null
+}
+
+function loadUploads(id: string | null): Video[] {
+  return migrate(id, uploadsKey(id ?? ''), LEGACY.uploads) ? loadJSON<Video[]>(uploadsKey(id ?? ''), []) : []
+}
+function loadComments(id: string | null): Record<number, Comment[]> {
+  return migrate(id, commentsKey(id ?? ''), LEGACY.comments)
+    ? loadJSON<Record<number, Comment[]>>(commentsKey(id ?? ''), {})
+    : {}
+}
+function loadEngage(id: string | null): Engagement {
+  return migrate(id, engagementKey(id ?? ''), LEGACY.engagement)
+    ? loadJSON<Engagement>(engagementKey(id ?? ''), emptyEngage)
+    : emptyEngage
+}
+
 export type LibraryCtx = {
-  /** 用户上传的视频（含持久化） */
+  /** 用户上传的视频（含持久化，按账号隔离） */
   userVideos: Video[]
   addUpload: (v: Video) => void
   removeUpload: (v: Video) => void
@@ -39,13 +72,42 @@ export type LibraryCtx = {
 const Ctx = createContext<LibraryCtx | null>(null)
 
 export function LibraryProvider({ children }: { children: ReactNode }) {
-  const [userVideos, setUserVideos] = useState<Video[]>(() => loadJSON(UPLOAD_KEY, []))
-  const [comments, setComments] = useState<Record<number, Comment[]>>(() => loadJSON(COMMENT_KEY, {}))
-  const [engagement, setEngagement] = useState<Engagement>(() => loadJSON(ENGAGE_KEY, emptyEngage))
+  const { activeId } = useAccount()
+  const skip = useRef(false)
+  const [userVideos, setUserVideos] = useState<Video[]>(() => loadUploads(activeId))
+  const [comments, setComments] = useState<Record<number, Comment[]>>(() => loadComments(activeId))
+  const [engagement, setEngagement] = useState<Engagement>(() => loadEngage(activeId))
 
-  useEffect(() => saveJSON(UPLOAD_KEY, userVideos), [userVideos])
-  useEffect(() => saveJSON(COMMENT_KEY, comments), [comments])
-  useEffect(() => saveJSON(ENGAGE_KEY, engagement), [engagement])
+  // 切换账号：以新账号数据重载（skip 防止把旧账号数据误写进新账号键）
+  useEffect(() => {
+    skip.current = true
+    setUserVideos(loadUploads(activeId))
+    setComments(loadComments(activeId))
+    setEngagement(loadEngage(activeId))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId])
+
+  useEffect(() => {
+    if (skip.current) {
+      skip.current = false
+      return
+    }
+    if (activeId) saveJSON(uploadsKey(activeId), userVideos)
+  }, [userVideos, activeId])
+  useEffect(() => {
+    if (skip.current) {
+      skip.current = false
+      return
+    }
+    if (activeId) saveJSON(commentsKey(activeId), comments)
+  }, [comments, activeId])
+  useEffect(() => {
+    if (skip.current) {
+      skip.current = false
+      return
+    }
+    if (activeId) saveJSON(engagementKey(activeId), engagement)
+  }, [engagement, activeId])
 
   const addUpload = (v: Video) => setUserVideos((prev) => [v, ...prev])
 
