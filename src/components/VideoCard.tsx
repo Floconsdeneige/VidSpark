@@ -2,6 +2,7 @@ import type { Video } from '@/data/mock'
 import { formatViews } from '@/data/mock'
 import { useInteractions } from '@/hooks/useInteractions'
 import { useLibrary } from '@/hooks/useLibrary'
+import { coverStyle } from '@/lib/cover'
 
 export default function VideoCard({
   video,
@@ -34,7 +35,7 @@ export default function VideoCard({
       }}
       className="group relative cursor-pointer overflow-hidden rounded-xl border border-border bg-card transition hover:-translate-y-1 hover:shadow-lg"
     >
-      <div className="relative h-40" style={{ background: video.cover }}>
+      <div className="relative h-40" style={coverStyle(video.cover)}>
         {rank !== undefined && (
           <span
             className={`absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-md text-sm font-bold ${

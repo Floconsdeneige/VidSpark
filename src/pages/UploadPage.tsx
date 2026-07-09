@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { categories, type CategoryKey, type Video } from '@/data/mock'
 import { uid, putBlob } from '@/lib/db'
 import { useAccount } from '@/hooks/useAccount'
+import { coverStyle } from '@/lib/cover'
 
 const coverOptions = [
   'linear-gradient(135deg,#667eea,#764ba2)',
@@ -54,13 +55,38 @@ export default function UploadPage({
   const pickVideo = (file: File) => {
     videoFileRef.current = file
     setFileName(file.name)
-    // 用隐藏 video 读取真实时长
+    // 用隐藏 video 读取真实时长，并截取一帧作为封面
     const url = URL.createObjectURL(file)
     const v = document.createElement('video')
     v.preload = 'metadata'
+    v.muted = true
     v.onloadedmetadata = () => {
       setRealDuration(fmtDuration(v.duration))
-      URL.revokeObjectURL(url)
+      // 跳到视频靠前位置（约 25%）截图；解码成功后画到 canvas
+      const seekTo = Math.min(Math.max(v.duration * 0.25, 0.1), Math.max(v.duration - 0.1, 0.1))
+      const capture = () => {
+        try {
+          const canvas = document.createElement('canvas')
+          canvas.width = v.videoWidth || 640
+          canvas.height = v.videoHeight || 360
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            ctx.drawImage(v, 0, 0, canvas.width, canvas.height)
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+            setCover(dataUrl)
+            setCoverPreview(null)
+          }
+        } catch {
+          /* 解码/跨域失败则保留渐变封面 */
+        }
+        URL.revokeObjectURL(url)
+      }
+      v.onseeked = capture
+      try {
+        v.currentTime = seekTo
+      } catch {
+        capture()
+      }
     }
     v.src = url
   }
@@ -152,7 +178,7 @@ export default function UploadPage({
           <p className="mt-2 text-sm text-muted-foreground">
             《{published.title}》已经出现在你的主页、分区、热门和动态里啦
           </p>
-          <div className="mt-4 h-32 rounded-xl" style={{ background: published.cover }} />
+          <div className="mt-4 h-32 rounded-xl" style={coverStyle(published.cover)} />
           <div className="mt-6 flex gap-3">
             <button
               onClick={() => onPlay(published)}
@@ -180,7 +206,7 @@ export default function UploadPage({
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[320px_1fr]">
         {/* 预览 */}
         <div>
-          <div className="relative h-44 rounded-2xl border border-border" style={{ background: cover }}>
+          <div className="relative h-44 rounded-2xl border border-border" style={coverStyle(cover)}>
             <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white">
               {duration}
             </span>

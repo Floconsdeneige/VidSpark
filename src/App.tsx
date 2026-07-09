@@ -11,6 +11,7 @@ import VideoDetailPage from '@/pages/VideoDetailPage'
 import { AccountProvider } from '@/hooks/useAccount'
 import { InteractionsProvider } from '@/hooks/useInteractions'
 import { LibraryProvider, useLibrary } from '@/hooks/useLibrary'
+import { ThemeProvider, useTheme } from '@/hooks/useTheme'
 import { videos as baseVideos, type Video } from '@/data/mock'
 
 type View = 'home' | 'popular' | 'categories' | 'upload' | 'feed' | 'profile' | 'settings' | 'detail'
@@ -49,6 +50,7 @@ const navIcon: Record<string, string> = {
 
 function Shell() {
   const { userVideos, addUpload } = useLibrary()
+  const { theme, toggleTheme } = useTheme()
   const [view, setView] = useState<View>('home')
   const [searchQuery, setSearchQuery] = useState('')
   const [detailVideo, setDetailVideo] = useState<Video | null>(null)
@@ -127,6 +129,14 @@ function Shell() {
         </form>
 
         <button
+          onClick={toggleTheme}
+          title={theme === 'dark' ? '切换到亮色' : '切换到暗色'}
+          className="rounded-full border border-border bg-card px-3 py-2 text-sm transition hover:bg-background"
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
+
+        <button
           onClick={() => go('upload')}
           className="rounded-full bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-500"
         >
@@ -162,8 +172,8 @@ function Shell() {
         useFixedPosition
         onLogoClick={() => go('home')}
         logo={<span className="text-sm font-bold text-red-500">VidSpark</span>}
-        menuBg="#27272a"
-        menuContentColor="#fafafa"
+        menuBg={theme === 'dark' ? '#27272a' : '#f4f4f5'}
+        menuContentColor={theme === 'dark' ? '#fafafa' : '#111827'}
         items={navItems}
         className="vs-bubble"
         style={{ gap: '12px', zIndex: 100 }}
@@ -192,12 +202,14 @@ function Shell() {
 
 export default function App() {
   return (
-    <AccountProvider>
-      <InteractionsProvider>
-        <LibraryProvider>
-          <Shell />
-        </LibraryProvider>
-      </InteractionsProvider>
-    </AccountProvider>
+    <ThemeProvider>
+      <AccountProvider>
+        <InteractionsProvider>
+          <LibraryProvider>
+            <Shell />
+          </LibraryProvider>
+        </InteractionsProvider>
+      </AccountProvider>
+    </ThemeProvider>
   )
 }

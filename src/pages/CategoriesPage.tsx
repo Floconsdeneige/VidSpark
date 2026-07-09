@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import VideoCard from '@/components/VideoCard'
 import { categories, matchVideo, type Video, type CategoryKey } from '@/data/mock'
+import { useInteractions } from '@/hooks/useInteractions'
 
 const catName = (k: CategoryKey) => categories.find((c) => c.key === k)?.name ?? ''
 
@@ -28,6 +29,8 @@ export default function CategoriesPage({
   const [active, setActive] = useState<CategoryKey | 'all'>('all')
   const [query, setQuery] = useState(initialQuery)
   const [history, setHistory] = useState<string[]>(loadHistory)
+  const [onlyFollowed, setOnlyFollowed] = useState(false)
+  const { followed } = useInteractions()
 
   const addHistory = (raw: string) => {
     const w = raw.trim()
@@ -50,10 +53,16 @@ export default function CategoriesPage({
   }, [])
 
   const q = query.trim()
-  const filtered = allVideos.filter((v) => {
+  let filtered = allVideos.filter((v) => {
     const catOk = active === 'all' || v.category === active
     return catOk && matchVideo(v, q, catName)
   })
+
+  // 只看关注的人：仅保留已关注 UP 主发布的视频
+  if (onlyFollowed) {
+    const set = new Set(followed)
+    filtered = filtered.filter((v) => set.has(v.author))
+  }
 
   const activeCat = categories.find((c) => c.key === active)
 
@@ -94,6 +103,7 @@ export default function CategoriesPage({
         onClick={() => {
           setActive('all')
           setQuery('')
+          setOnlyFollowed(false)
         }}
         className="mb-4 text-sm text-muted-foreground transition hover:text-foreground"
       >
@@ -153,20 +163,51 @@ export default function CategoriesPage({
         </div>
       )}
 
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') addHistory(query)
-        }}
-        placeholder="搜索标题 / UP主 / 标签…"
-        className="mb-6 w-full max-w-md rounded-full border border-border bg-card px-4 py-2 text-sm outline-none focus:border-red-500"
-      />
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') addHistory(query)
+          }}
+          placeholder="搜索标题 / UP主 / 标签…"
+          className="w-full max-w-md rounded-full border border-border bg-card px-4 py-2 text-sm outline-none focus:border-red-500"
+        />
+        <button
+          onClick={() => setOnlyFollowed((v) => !v)}
+          className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm transition ${
+            onlyFollowed
+              ? 'border-red-500 bg-red-600 text-white'
+              : 'border-border bg-card text-muted-foreground hover:text-foreground'
+          }`}
+          title="只显示你已关注的 UP 主发布的视频"
+        >
+          👥 只看关注的人
+          {onlyFollowed && <span className="text-xs">✓</span>}
+        </button>
+      </div>
 
       {filtered.length === 0 ? (
         <div className="py-16 text-center text-muted-foreground">
-          没有找到匹配的视频 🤔
-          <div className="mt-2 text-xs">试试别的关键词，或换个分区</div>
+          {onlyFollowed ? (
+            <>
+              你关注的人里没有匹配的视频 🤔
+              <div className="mt-2 text-xs">
+                先去视频详情页关注几位 UP 主，或
+                <button
+                  onClick={() => setOnlyFollowed(false)}
+                  className="ml-1 text-red-500 underline"
+                >
+                  关闭筛选
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              没有找到匹配的视频 🤔
+              <div className="mt-2 text-xs">试试别的关键词，或换个分区</div>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">

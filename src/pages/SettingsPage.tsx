@@ -7,8 +7,10 @@ import {
   localBlobCount,
   type Backup,
 } from '@/lib/backup'
+import { useTheme } from '@/hooks/useTheme'
 
 export default function SettingsPage({ onBack }: { onBack: () => void }) {
+  const { theme, toggleTheme } = useTheme()
   const [toast, setToast] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [stats, setStats] = useState<{ lsBytes: number; keys: number; blobCount: number }>({
@@ -105,6 +107,23 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
       <p className="mb-6 text-sm text-muted-foreground">
         VidSpark 是纯前端模拟器，所有数据保存在「此浏览器」。用下面功能可备份迁移、或彻底清空。
       </p>
+
+      {/* 外观 */}
+      <section className="mb-6 rounded-2xl border border-border bg-card p-5">
+        <h2 className="mb-3 text-sm font-semibold">🎨 外观</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="font-medium">主题</div>
+            <div className="text-xs text-muted-foreground">当前：{theme === 'dark' ? '暗色' : '亮色'}</div>
+          </div>
+          <button
+            onClick={toggleTheme}
+            className="flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-medium transition hover:bg-background"
+          >
+            {theme === 'dark' ? '☀️ 切换到亮色' : '🌙 切换到暗色'}
+          </button>
+        </div>
+      </section>
 
       {/* 存储概览 */}
       <section className="mb-6 rounded-2xl border border-border bg-card p-5">
