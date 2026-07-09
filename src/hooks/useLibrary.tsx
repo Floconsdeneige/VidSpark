@@ -23,7 +23,7 @@ export type LibraryCtx = {
   removeUpload: (v: Video) => void
   /** 某视频的评论（持久化评论 + 预设评论，新评论在前） */
   getComments: (id: number) => Comment[]
-  addComment: (id: number, text: string) => void
+  addComment: (id: number, text: string, author?: string) => void
   /** 播放量 = 基础量 + 增量 */
   viewCount: (v: Video) => number
   /** 打开视频时调用：播放量 +1 并写入观看历史 */
@@ -62,8 +62,13 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  const addComment = (id: number, text: string) => {
-    const item: Comment = { user: '我', avatar: '我', text: text.trim(), time: '刚刚' }
+  const addComment = (id: number, text: string, author = '我') => {
+    const item: Comment = {
+      user: author,
+      avatar: Array.from(author)[0] ?? '我',
+      text: text.trim(),
+      time: '刚刚',
+    }
     setComments((prev) => ({ ...prev, [id]: [item, ...(prev[id] ?? [])] }))
   }
 

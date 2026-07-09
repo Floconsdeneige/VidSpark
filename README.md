@@ -15,6 +15,8 @@
 - 🫧 **BubbleMenu** — GSAP 动效悬浮导航菜单（react-bits BubbleMenu）
 - 📱 **移动端适配** — 底部导航栏，响应式布局
 - 🔍 **搜索** — 全局搜索，支持标题 / 作者 / 标签匹配与历史记录
+- 👤 **我的 / 本地账号** — 可自定义昵称与头像，投稿、评论、互动均以该身份呈现
+- 📰 **动态** — 根据你的关注、投稿与互动（点赞 / 投币 / 收藏）实时生成时间线
 
 ## 🛠 技术栈
 
@@ -51,6 +53,20 @@ npm run preview
 - `npm run build` 产物输出至 `dist/`（已加入 `.gitignore`）。
 - 纯前端，可托管于任意静态服务器（GitHub Pages、CloudStudio、Vercel、Netlify 等）。
 - 另提供单文件离线版 `vidspark-standalone.html`，无需构建即可在浏览器直接打开。
+
+### 一键部署到 GitHub Pages
+
+```bash
+# 设置仅含 repo 权限的 PAT（部署完可在 GitHub 后台撤销）
+export GITHUB_TOKEN=ghp_xxx        # PowerShell: $env:GITHUB_TOKEN="ghp_xxx"
+
+# 构建并推送到 gh-pages 分支（自动启用 GitHub Pages）
+npm run deploy
+```
+
+脚本 `scripts/deploy.mjs` 会自动：`npm run build` → 将 `dist/` 推送到 `gh-pages` 分支。
+默认仓库为 `Floconsdeneige/VidSpark`，可用环境变量 `GITHUB_REPO` 覆盖。
+部署后访问 `https://<owner>.github.io/<repo>/`。
 
 ## 📁 目录结构
 

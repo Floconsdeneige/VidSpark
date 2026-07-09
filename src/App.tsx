@@ -7,6 +7,7 @@ import UploadPage from '@/pages/UploadPage'
 import FeedPage from '@/pages/FeedPage'
 import ProfilePage from '@/pages/ProfilePage'
 import VideoDetailPage from '@/pages/VideoDetailPage'
+import { AccountProvider } from '@/hooks/useAccount'
 import { InteractionsProvider } from '@/hooks/useInteractions'
 import { LibraryProvider, useLibrary } from '@/hooks/useLibrary'
 import { videos as baseVideos, type Video } from '@/data/mock'
@@ -142,7 +143,7 @@ function Shell() {
           onPlay={play}
         />
       )}
-      {view === 'feed' && <FeedPage userUploads={userVideos} onPlay={play} />}
+      {view === 'feed' && <FeedPage allVideos={allVideos} userUploads={userVideos} onPlay={play} />}
       {view === 'profile' && <ProfilePage allVideos={allVideos} onPlay={play} onGoHome={() => go('home')} onBack={() => go('home')} />}
       {view === 'detail' && detailVideo && (
         // key 绑定视频 id：从相关推荐点另一视频时，重建页面以重置播放/评论状态
@@ -185,10 +186,12 @@ function Shell() {
 
 export default function App() {
   return (
-    <InteractionsProvider>
-      <LibraryProvider>
-        <Shell />
-      </LibraryProvider>
-    </InteractionsProvider>
+    <AccountProvider>
+      <InteractionsProvider>
+        <LibraryProvider>
+          <Shell />
+        </LibraryProvider>
+      </InteractionsProvider>
+    </AccountProvider>
   )
 }

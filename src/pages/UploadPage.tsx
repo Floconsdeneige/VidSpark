@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { categories, type CategoryKey, type Video } from '@/data/mock'
 import { uid, putBlob } from '@/lib/db'
+import { useAccount } from '@/hooks/useAccount'
 
 const coverOptions = [
   'linear-gradient(135deg,#667eea,#764ba2)',
@@ -48,6 +49,7 @@ export default function UploadPage({
   const finalizedRef = useRef(false)
 
   const titleError = !title.trim()
+  const { account } = useAccount()
 
   const pickVideo = (file: File) => {
     videoFileRef.current = file
@@ -115,7 +117,7 @@ export default function UploadPage({
       const v: Video = {
         id,
         title: title.trim(),
-        author: '我',
+        author: account.name,
         views: '0',
         viewsNum: 0,
         duration,
@@ -192,7 +194,7 @@ export default function UploadPage({
             )}
           </div>
           <div className="mt-3 text-sm font-medium line-clamp-2">{title || '视频标题预览'}</div>
-          <div className="text-sm text-muted-foreground">@我</div>
+          <div className="text-sm text-muted-foreground">@{account.name}</div>
 
           {fileName && (
             <div className="mt-2 truncate rounded-lg bg-card px-3 py-2 text-xs text-muted-foreground" title={fileName}>

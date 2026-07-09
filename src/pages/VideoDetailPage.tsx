@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { Video } from '@/data/mock'
 import { categories, formatViews } from '@/data/mock'
 import { useInteractions } from '@/hooks/useInteractions'
+import { useAccount } from '@/hooks/useAccount'
 import { useLibrary } from '@/hooks/useLibrary'
 import { getBlob } from '@/lib/db'
 
@@ -37,6 +38,7 @@ export default function VideoDetailPage({
     favs,
   } = useInteractions()
   const { getComments, addComment, viewCount, incrementView, removeUpload } = useLibrary()
+  const { account } = useAccount()
 
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -302,7 +304,7 @@ export default function VideoDetailPage({
                 onChange={(e) => setCommentText(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && commentText.trim()) {
-                    addComment(video.id, commentText)
+                    addComment(video.id, commentText, account.name)
                     setCommentText('')
                   }
                 }}

@@ -3,6 +3,7 @@ import VideoCard from '@/components/VideoCard'
 import type { Video } from '@/data/mock'
 import { useInteractions } from '@/hooks/useInteractions'
 import { useLibrary } from '@/hooks/useLibrary'
+import { useAccount } from '@/hooks/useAccount'
 
 type Tab = 'uploads' | 'faved' | 'liked' | 'history'
 
@@ -12,6 +13,8 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'liked', label: '点赞', icon: '👍' },
   { key: 'history', label: '观看历史', icon: '🕘' },
 ]
+
+const AVATARS = ['😎', '🦊', '🐱', '🐼', '🚀', '🌟', '🔥', '🍉', '👾', '🐯', '🦄', '🌈']
 
 export default function ProfilePage({
   allVideos,
@@ -26,7 +29,11 @@ export default function ProfilePage({
 }) {
   const { userVideos, removeUpload, history } = useLibrary()
   const { isFaved, isLiked } = useInteractions()
+  const { account, setName, setAvatar } = useAccount()
   const [tab, setTab] = useState<Tab>('uploads')
+  const [editing, setEditing] = useState(false)
+  const [draftName, setDraftName] = useState(account.name)
+  const [draftAvatar, setDraftAvatar] = useState(account.avatar)
 
   const byId = (id: number) => allVideos.find((v) => v.id === id)
 
@@ -39,17 +46,76 @@ export default function ProfilePage({
 
   const current = lists[tab]
 
+  const saveProfile = () => {
+    setName(draftName)
+    setAvatar(draftAvatar)
+    setEditing(false)
+  }
+
   return (
     <main className="px-6 pb-20 pt-8">
       <div className="mb-6 flex items-center gap-3">
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-pink-500 text-2xl font-bold text-white">
-          我
+          {account.avatar}
         </div>
-        <div>
-          <h1 className="text-2xl font-bold">我的 VidSpark</h1>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold">{account.name}</h1>
           <p className="text-sm text-muted-foreground">本地账号 · 数据保存在此浏览器</p>
         </div>
+        <button
+          onClick={() => {
+            setDraftName(account.name)
+            setDraftAvatar(account.avatar)
+            setEditing((e) => !e)
+          }}
+          className="rounded-full border border-border bg-card px-4 py-2 text-sm font-medium transition hover:bg-background"
+        >
+          ✏️ 编辑资料
+        </button>
       </div>
+
+      {/* 编辑资料面板 */}
+      {editing && (
+        <div className="mb-6 rounded-2xl border border-border bg-card p-5">
+          <div className="mb-3 text-sm font-medium">昵称</div>
+          <input
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            maxLength={16}
+            placeholder="给自己起个名字"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-red-500"
+          />
+          <div className="mb-2 mt-4 text-sm font-medium">头像</div>
+          <div className="flex flex-wrap gap-2">
+            {AVATARS.map((a) => (
+              <button
+                key={a}
+                type="button"
+                onClick={() => setDraftAvatar(a)}
+                className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-xl transition ${
+                  draftAvatar === a ? 'border-red-500 bg-background' : 'border-transparent hover:border-border'
+                }`}
+              >
+                {a}
+              </button>
+            ))}
+          </div>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              onClick={() => setEditing(false)}
+              className="rounded-full border border-border px-4 py-2 text-sm transition hover:bg-background"
+            >
+              取消
+            </button>
+            <button
+              onClick={saveProfile}
+              className="rounded-full bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-500"
+            >
+              保存
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Tab 切换 */}
       <div className="mb-6 flex flex-wrap gap-2">

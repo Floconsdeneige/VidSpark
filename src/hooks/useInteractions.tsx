@@ -41,6 +41,10 @@ export type InteractionsCtx = {
   toggleFav: (id: number) => void
   isFollowed: (author: string) => boolean
   toggleFollow: (author: string) => void
+  liked: number[]
+  coined: number[]
+  faved: number[]
+  followed: string[]
   likes: (base: number, id: number) => number
   coins: (base: number, id: number) => number
   favs: (base: number, id: number) => number
@@ -77,6 +81,10 @@ export function InteractionsProvider({ children }: { children: ReactNode }) {
     toggleFav: (id) => toggle('faved', id),
     isFollowed: (a) => state.followed.includes(a),
     toggleFollow: (a) => toggle('followed', a),
+    liked: state.liked,
+    coined: state.coined,
+    faved: state.faved,
+    followed: state.followed,
     likes: (base, id) => base + (state.liked.includes(id) ? 1 : 0),
     coins: (base, id) => base + (state.coined.includes(id) ? 1 : 0),
     favs: (base, id) => base + (state.faved.includes(id) ? 1 : 0),
